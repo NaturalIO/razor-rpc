@@ -403,7 +403,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     }
 
     async fn receive_loop(&self) {
-        let mut tick = <F as AsyncTime>::tick(Duration::from_secs(1));
+        let mut tick = <F as AsyncTime>::interval(Duration::from_secs(1));
         loop {
             let f = self.recv_some();
             pin_mut!(f);
