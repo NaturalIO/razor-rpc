@@ -2,7 +2,7 @@
 #[test]
 #[allow(dead_code)]
 fn test_client_task_define() {
-    use crossfire::MTx;
+    use crossfire::{MTx, mpsc};
     use nix::errno::Errno;
     use razor_stream::client::task::ClientTaskCommon;
     use razor_stream::error::RpcError;
@@ -40,7 +40,7 @@ fn test_client_task_define() {
         #[field(res)]
         res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
-        noti: Option<MTx<Self>>,
+        noti: Option<MTx<mpsc::List<Self>>>,
     }
 
     #[client_task(FileAction::Read, debug)]
@@ -56,6 +56,6 @@ fn test_client_task_define() {
         #[field(res)]
         res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
-        noti: Option<MTx<Self>>,
+        noti: Option<MTx<mpsc::List<Self>>>,
     }
 }

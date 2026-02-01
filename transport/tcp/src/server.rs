@@ -1,4 +1,5 @@
 use captains_log::filter::LogFilter;
+use crossfire::{MAsyncRx, mpmc};
 use io_buffer::Buffer;
 use orb::io::AsyncBufStream;
 use orb::net::{UnifyListener, UnifyStream};
@@ -88,7 +89,7 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
     ///
     /// NOTE: you should consume the buffer ref before recv another request.
     async fn read_req<'a>(
-        &'a self, logger: &LogFilter, close_ch: &crossfire::MAsyncRx<()>,
+        &'a self, logger: &LogFilter, close_ch: &MAsyncRx<mpmc::Null>,
     ) -> Result<RpcSvrReq<'a>, RpcIntErr> {
         let reader = self.get_stream_mut();
         let read_timeout = self.config.read_timeout;

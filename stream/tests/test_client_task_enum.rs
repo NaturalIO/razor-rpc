@@ -17,7 +17,7 @@ struct TaskA<E: RpcErrCodec> {
     #[field(res)]
     res: Option<Result<(), RpcError<E>>>,
     #[field(noti)]
-    noti: Option<MTx<MyTask>>,
+    noti: Option<MTx<mpsc::List<MyTask>>>,
 }
 
 #[client_task("task_b", debug)]
@@ -31,7 +31,7 @@ struct TaskB<E: RpcErrCodec> {
     #[field(res)]
     res: Option<Result<(), RpcError<E>>>,
     #[field(noti)]
-    noti: Option<MTx<MyTask>>,
+    noti: Option<MTx<mpsc::List<MyTask>>>,
     _phantom: PhantomData<E>,
 }
 
@@ -50,7 +50,7 @@ struct TaskC<E: RpcErrCodec> {
     #[field(res)]
     res: Option<Result<(), RpcError<E>>>,
     #[field(noti)]
-    noti: Option<MTx<MyTask>>,
+    noti: Option<MTx<mpsc::List<MyTask>>>,
     _phantom: PhantomData<E>,
 }
 
@@ -146,7 +146,7 @@ struct TaskActionOverwrite {
     #[field(res)]
     res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    noti: Option<MTx<MyTaskWithAction>>,
+    noti: Option<MTx<mpsc::List<MyTaskWithAction>>>,
 }
 
 #[client_task(999, debug)] // Dummy action
@@ -160,7 +160,7 @@ struct TaskActionDelegate {
     #[field(res)]
     res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    noti: Option<MTx<MyTaskWithAction>>,
+    noti: Option<MTx<mpsc::List<MyTaskWithAction>>>,
 }
 
 #[client_task("task_b", debug)]
@@ -174,7 +174,7 @@ struct TaskBWithAction {
     #[field(res)]
     res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    noti: Option<MTx<MyTaskWithAction>>,
+    noti: Option<MTx<mpsc::List<MyTaskWithAction>>>,
 }
 
 #[client_task_enum(error = Errno)]

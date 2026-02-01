@@ -1,4 +1,6 @@
 pub mod task;
+use crossfire::oneshot::oneshot;
+use crossfire::*;
 pub use razor_rpc_macros::endpoint_async;
 pub use razor_stream::client::ClientCaller;
 pub use task::*;
@@ -51,11 +53,11 @@ where
         Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
         E: RpcErrCodec,
     {
-        let (tx, rx) = crossfire::spsc::bounded_tx_blocking_rx_async::<APIClientReq>(1);
+        let (tx, rx) = oneshot::<APIClientReq>();
         // TODO should optimize one shot channel
         <C as ClientCaller>::send_req(&self.caller, make_req(&self.codec, service_method, req, tx))
             .await;
-        return process_res(&self.codec, rx.recv().await);
+        return process_res(&self.codec, rx.recv_async().await);
     }
 }
 
@@ -103,7 +105,7 @@ where
         Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
         E: RpcErrCodec,
     {
-        let (tx, rx) = crossfire::spsc::bounded_blocking::<APIClientReq>(1);
+        let (tx, rx) = oneshot::<APIClientReq>();
         // TODO should optimize one shot channel
         self.caller.send_req_blocking(make_req(&self.codec, service_method, req, tx));
         return process_res(&self.codec, rx.recv());
@@ -132,7 +134,7 @@ where
 
 #[inline]
 fn make_req<C, Req>(
-    codec: &C, service_method: &'static str, req: &Req, done_tx: crossfire::Tx<APIClientReq>,
+    codec: &C, service_method: &'static str, req: &Req, done_tx: oneshot::TxOneshot<APIClientReq>,
 ) -> APIClientReq
 where
     C: Codec,

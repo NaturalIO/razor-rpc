@@ -34,8 +34,8 @@ use std::time::Duration;
 /// - If ping mixed with task with real business, might blocked due to throttler of in-flight
 /// message in the stream.
 pub struct ClientPool<F: ClientFacts, P: ClientTransport> {
-    tx_async: MAsyncTx<F::Task>,
-    tx: MTx<F::Task>,
+    tx_async: MAsyncTx<mpmc::Array<F::Task>>,
+    tx: MTx<mpmc::Array<F::Task>>,
     inner: Arc<ClientPoolInner<F, P>>,
 }
 
@@ -48,7 +48,7 @@ impl<F: ClientFacts, P: ClientTransport> Clone for ClientPool<F, P> {
 struct ClientPoolInner<F: ClientFacts, P: ClientTransport> {
     facts: Arc<F>,
     logger: Arc<LogFilter>,
-    rx: MAsyncRx<F::Task>,
+    rx: MAsyncRx<mpmc::Array<F::Task>>,
     addr: String,
     conn_id: String,
     /// whether connection is healthy?

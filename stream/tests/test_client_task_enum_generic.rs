@@ -28,7 +28,7 @@ pub struct GenericTask<T: Send + Debug + Unpin + 'static> {
     #[field(res)]
     res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    noti: Option<MTx<MyEnumTask<T>>>,
+    noti: Option<MTx<mpsc::List<MyEnumTask<T>>>>,
     _phantom: PhantomData<T>,
 }
 

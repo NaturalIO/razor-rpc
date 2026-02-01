@@ -28,8 +28,8 @@ pub(crate) struct DelayTasksBatch<T: ClientTask> {
 
 pub struct ClientTaskTimer<F: ClientFacts> {
     conn_id: String,
-    pending_tasks_recv: AsyncStream<ClientTaskItem<F::Task>>,
-    pending_tasks_sender: MAsyncTx<ClientTaskItem<F::Task>>,
+    pending_tasks_recv: AsyncStream<mpsc::Array<ClientTaskItem<F::Task>>>,
+    pending_tasks_sender: MAsyncTx<mpsc::Array<ClientTaskItem<F::Task>>>,
     pending_task_count: AtomicU64,
 
     sent_tasks: FxHashMap<u64, ClientTaskItem<F::Task>>, // sent_tasks of the current second

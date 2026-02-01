@@ -283,7 +283,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 /// use razor_stream_macros::{client_task, client_task_enum};
 /// use razor_stream::client::task::ClientTaskCommon;
 /// use razor_stream::error::{RpcErrCodec, RpcError};
-/// use crossfire::MTx;
+/// use crossfire::{MTx, mpsc};
 /// use serde_derive::{Deserialize, Serialize};
 /// use nix::errno::Errno;
 /// use std::marker::PhantomData;
@@ -305,7 +305,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 ///     #[field(res)]
 ///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
-///     noti: Option<MTx<MyEnumTask<Errno>>>,
+///     noti: Option<MTx<mpsc::List<MyEnumTask>>>,
 /// }
 ///
 /// #[client_task_enum(error=nix::error::Errno)]

@@ -12,7 +12,7 @@ use crate::client::task::ClientTaskDone;
 use crate::client::timer::ClientTaskTimer;
 use crate::{client::*, proto};
 use captains_log::filter::LogFilter;
-use crossfire::*;
+use crossfire::null::CloseHandle;
 use futures::pin_mut;
 use orb::prelude::*;
 use std::time::Duration;
@@ -39,7 +39,7 @@ use sync_utils::time::DelayedTime;
 /// An internal timer then registers the request through a channel, and when the response
 /// is received, it can optionally notify the user through a user-defined channel or another mechanism.
 pub struct ClientStream<F: ClientFacts, P: ClientTransport> {
-    close_tx: Option<MTx<()>>,
+    close_tx: Option<CloseHandle<mpsc::Null>>,
     inner: Arc<ClientStreamInner<F, P>>,
 }
 
@@ -61,7 +61,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
         facts: Arc<F>, conn: P, client_id: u64, conn_id: String,
         last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Self {
-        let (_close_tx, _close_rx) = mpmc::unbounded_async::<()>();
+        let (_close_tx, _close_rx) = mpsc::new::<mpsc::Null, _, _>();
         let inner = Arc::new(ClientStreamInner::new(
             facts,
             conn,
@@ -105,12 +105,11 @@ impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
     /// Force the receiver to exit.
     ///
     /// You can call it when connectivity probes detect that a server is unreachable.
+    /// And then just let the Client drop
     pub async fn set_error_and_exit(&mut self) {
+        // TODO review usage when doing ConnProbe
         self.inner.has_err.store(true, Ordering::SeqCst);
         self.inner.conn.close_conn::<F>(&self.inner.logger).await;
-        if let Some(close_tx) = self.close_tx.as_ref() {
-            let _ = close_tx.send(()); // This equals to ClientStream::drop
-        }
     }
 
     /// send_task() should only be called without parallelism.
@@ -165,8 +164,10 @@ struct ClientStreamInner<F: ClientFacts, P: ClientTransport> {
     client_id: u64,
     conn: P,
     seq: AtomicU64,
-    close_rx: MAsyncRx<()>, // When ClientStream(sender) dropped, receiver will be timer
-    closed: AtomicBool,     // flag set by either sender or receive on there exit
+    // NOTE: because close_rx is AsyncRx (lower cost to register waker), but does not have Sync, to solve the & does
+    // not have Send problem, we convert this to mut ref to make borrow checker shutup
+    close_rx: UnsafeCell<AsyncRx<mpsc::Null>>,
+    closed: AtomicBool, // flag set by either sender or receive on there exit
     timer: UnsafeCell<ClientTaskTimer<F>>,
     // TODO can closed and has_err merge ?
     has_err: AtomicBool,
@@ -190,7 +191,7 @@ impl<F: ClientFacts, P: ClientTransport> fmt::Debug for ClientStreamInner<F, P> 
 
 impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     pub fn new(
-        facts: Arc<F>, conn: P, client_id: u64, conn_id: String, close_rx: MAsyncRx<()>,
+        facts: Arc<F>, conn: P, client_id: u64, conn_id: String, close_rx: AsyncRx<mpsc::Null>,
         last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Self {
         let config = facts.get_config();
@@ -201,7 +202,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
         let client_inner = Self {
             client_id,
             conn,
-            close_rx,
+            close_rx: UnsafeCell::new(close_rx),
             closed: AtomicBool::new(false),
             seq: AtomicU64::new(1),
             encode_buf: UnsafeCell::new(Vec::with_capacity(1024)),
@@ -220,6 +221,11 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     #[inline(always)]
     fn get_timer_mut(&self) -> &mut ClientTaskTimer<F> {
         unsafe { transmute(self.timer.get()) }
+    }
+
+    #[inline(always)]
+    fn get_close_rx(&self) -> &mut AsyncRx<mpsc::Null> {
+        unsafe { transmute(self.close_rx.get()) }
     }
 
     #[inline(always)]
@@ -366,6 +372,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                 if timer.check_pending_tasks_empty() || self.has_err.load(Ordering::Relaxed) {
                     return Err(RpcIntErr::IO);
                 }
+                // When ClientStream(sender) dropped, receiver will be timer
                 if let Err(_e) = self
                     .conn
                     .read_resp(self.facts.as_ref(), &self.logger, &self.codec, None, timer)
@@ -376,13 +383,15 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                 }
             } else {
                 // Block here for new header without timeout
+                // NOTE: because close_rx is AsyncRx, which does not have Sync, to solve the & does
+                // not have Send problem, we convert this to mut ref to make borrow checker shutup
                 match self
                     .conn
                     .read_resp(
                         self.facts.as_ref(),
                         &self.logger,
                         &self.codec,
-                        Some(&self.close_rx),
+                        Some(self.get_close_rx()),
                         timer,
                     )
                     .await

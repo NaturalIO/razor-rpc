@@ -2,7 +2,7 @@
 #[test]
 #[allow(dead_code)]
 fn test_client_task_enum_define() {
-    use crossfire::MTx;
+    use crossfire::{MTx, mpsc};
     use nix::errno::Errno;
     use razor_stream::client::task::ClientTaskCommon;
     use razor_stream::error::RpcError;
@@ -26,7 +26,7 @@ fn test_client_task_enum_define() {
         #[field(res)]
         res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
-        noti: Option<MTx<FileTask>>,
+        noti: Option<MTx<mpsc::List<FileTask>>>,
     }
 
     #[client_task(2, debug)] // This action will be used as the variant doesn't specify one
@@ -40,7 +40,7 @@ fn test_client_task_enum_define() {
         #[field(res)]
         res: Option<Result<(), RpcError<Errno>>>,
         #[field(noti)]
-        noti: Option<MTx<FileTask>>,
+        noti: Option<MTx<mpsc::List<FileTask>>>,
     }
 
     #[client_task_enum(error = Errno)]

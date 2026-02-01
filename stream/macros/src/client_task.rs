@@ -325,9 +325,9 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         let (impl_generics, ty_generics, where_clause) = ast.generics.split_for_impl();
 
         let where_clause_with_into = if where_clause.is_some() {
-            quote! { #where_clause, Self: Into<#noti_inner_type> }
+            quote! { #where_clause, Self: Into<<#noti_inner_type as crossfire::flavor::Queue>::Item> }
         } else {
-            quote! { where Self: Into<#noti_inner_type> }
+            quote! { where Self: Into<<#noti_inner_type as crossfire::flavor::Queue>::Item> }
         };
 
         quote! {
@@ -525,7 +525,7 @@ fn test_missing_noti_field() {}
 /// ```compile_fail
 /// use razor_stream_macros::*;
 /// use razor_stream::client::task::ClientTaskCommon;
-/// use crossfire::MTx;
+/// use crossfire::{MTx, mpsc};
 ///
 /// #[client_task]
 /// pub struct MissingResField {
@@ -536,7 +536,7 @@ fn test_missing_noti_field() {}
 ///     #[field(resp)]
 ///     resp: Option<()>,
 ///     #[field(noti)]
-///     noti: Option<MTx<Self>>,
+///     noti: Option<MTx<mpsc::List<Self>>>,
 /// }
 /// ```
 #[doc(hidden)]

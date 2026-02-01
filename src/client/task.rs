@@ -2,6 +2,7 @@ use crate::{
     Codec,
     error::{EncodedErr, RpcIntErr},
 };
+use crossfire::oneshot::TxOneshot;
 use razor_stream::client::task::{
     ClientTask, ClientTaskAction, ClientTaskCommon, ClientTaskDecode, ClientTaskDone,
     ClientTaskEncode,
@@ -17,7 +18,7 @@ pub struct APIClientReq {
     pub action: String,
     pub resp: Option<Vec<u8>>,
     pub res: Option<Result<(), EncodedErr>>,
-    pub noti: Option<crossfire::Tx<Self>>,
+    pub noti: Option<TxOneshot<Self>>,
 }
 
 impl ClientTaskEncode for APIClientReq {

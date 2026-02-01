@@ -4,6 +4,7 @@
 use crate::proto::RpcAction;
 use crate::{Codec, error::*};
 use captains_log::filter::LogFilter;
+use crossfire::{MAsyncRx, mpmc};
 use io_buffer::Buffer;
 use orb::prelude::*;
 use std::time::Duration;
@@ -80,7 +81,7 @@ pub trait ServerTransport: Send + Sync + Sized + 'static + fmt::Debug {
 
     /// Read a request from the socket
     fn read_req<'a>(
-        &'a self, logger: &LogFilter, close_ch: &crossfire::MAsyncRx<()>,
+        &'a self, logger: &LogFilter, close_ch: &MAsyncRx<mpmc::Null>,
     ) -> impl Future<Output = Result<RpcSvrReq<'a>, RpcIntErr>> + Send;
 
     /// Write our user task response

@@ -357,7 +357,7 @@ pub struct TaskWithDone {
     #[field(res)]
     res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    noti: Option<MTx<Self>>,
+    noti: Option<MTx<mpsc::List<Self>>>,
 }
 
 #[test]

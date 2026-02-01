@@ -1,5 +1,5 @@
 use captains_log::filter::LogFilter;
-use crossfire::MAsyncRx;
+use crossfire::{AsyncRx, mpsc};
 use io_buffer::Buffer;
 use orb::net::UnifyStream;
 use orb::prelude::*;
@@ -272,8 +272,8 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     /// return false to indicate aborted by close_f
     #[inline]
     async fn read_resp<F: ClientFacts>(
-        &self, facts: &F, logger: &LogFilter, codec: &F::Codec, close_ch: Option<&MAsyncRx<()>>,
-        task_reg: &mut ClientTaskTimer<F>,
+        &self, facts: &F, logger: &LogFilter, codec: &F::Codec,
+        close_ch: Option<&mut AsyncRx<mpsc::Null>>, task_reg: &mut ClientTaskTimer<F>,
     ) -> Result<bool, RpcIntErr> {
         let mut resp_head_buf = [0u8; proto::RPC_RESP_HEADER_LEN];
         let reader = self.get_stream_mut();

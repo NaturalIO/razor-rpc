@@ -39,7 +39,7 @@ where
     round_robin: bool,
     facts: Arc<F>,
     retry_limit: usize,
-    retry_tx: MTx<FailoverTask<F::Task>>,
+    retry_tx: MTx<mpsc::List<FailoverTask<F::Task>>>,
     ver: AtomicU64,
     rr_counter: AtomicUsize,
     pool_channel_size: usize,
@@ -156,7 +156,8 @@ where
     P: ClientTransport,
 {
     async fn retry_worker(
-        weak_self: Weak<Self>, logger: Arc<LogFilter>, retry_rx: AsyncRx<FailoverTask<F::Task>>,
+        weak_self: Weak<Self>, logger: Arc<LogFilter>,
+        retry_rx: AsyncRx<mpsc::List<FailoverTask<F::Task>>>,
     ) {
         while let Ok(mut task) = retry_rx.recv().await {
             if let Some(inner) = weak_self.upgrade() {

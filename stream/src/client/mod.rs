@@ -2,7 +2,7 @@
 
 use crate::{Codec, error::RpcIntErr};
 use captains_log::filter::LogFilter;
-use crossfire::MAsyncRx;
+use crossfire::{AsyncRx, mpsc};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -165,8 +165,8 @@ pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
 
     /// Read the response and decode it from the socket, find and notify the registered ClientTask
     fn read_resp<F: ClientFacts>(
-        &self, facts: &F, logger: &LogFilter, codec: &F::Codec, close_ch: Option<&MAsyncRx<()>>,
-        task_reg: &mut ClientTaskTimer<F>,
+        &self, facts: &F, logger: &LogFilter, codec: &F::Codec,
+        close_ch: Option<&mut AsyncRx<mpsc::Null>>, task_reg: &mut ClientTaskTimer<F>,
     ) -> impl std::future::Future<Output = Result<bool, RpcIntErr>> + Send;
 }
 

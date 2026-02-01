@@ -12,15 +12,16 @@ pub use razor_stream_macros::server_task_enum;
 
 use crate::proto::{RpcAction, RpcActionOwned};
 use crate::{Codec, error::*};
+use crossfire::*;
 use io_buffer::Buffer;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Sum up trait for server response task
-pub trait ServerTaskResp: ServerTaskEncode + Send + Sized + Unpin + 'static + fmt::Debug {}
+pub trait ServerTaskResp: ServerTaskEncode + Send + Sized + 'static + fmt::Debug {}
 
 /// How to decode a server request
-pub trait ServerTaskDecode<R: Send + Unpin + 'static>: Send + Sized + Unpin + 'static {
+pub trait ServerTaskDecode<R: Send + 'static>: Send + Sized + 'static {
     fn decode_req<'a, C: Codec>(
         codec: &'a C, action: RpcAction<'a>, seq: u64, req: &'a [u8], blob: Option<Buffer>,
         noti: RespNoti<R>,
@@ -33,7 +34,7 @@ pub trait ServerTaskDecode<R: Send + Unpin + 'static>: Send + Sized + Unpin + 's
 /// don't need to known the type, but this requires reference and lifetime to the task.
 /// for the returning EncodedErr, it's possible generated during the encode,
 /// Otherwise when existing EncodedErr held in `res` field, the user need to take the res field out of the task.
-pub trait ServerTaskEncode: Send + 'static + Unpin {
+pub trait ServerTaskEncode: Send + 'static {
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
     ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>);
@@ -43,7 +44,11 @@ pub trait ServerTaskEncode: Send + 'static + Unpin {
 ///
 /// This is not mandatory for the framework, this a guideline,
 /// You can skip this as long as you send the result back to RespNoti.
-pub trait ServerTaskDone<T: Send + 'static, E: RpcErrCodec>: Sized + 'static {
+pub trait ServerTaskDone<T, E>: Sized + 'static
+where
+    T: Send + 'static,
+    E: RpcErrCodec,
+{
     /// Should implement for enum delegation, not intended for user call
     fn _set_result(&mut self, res: Result<(), E>) -> RespNoti<T>;
 
@@ -71,8 +76,8 @@ pub trait ServerTaskAction {
 #[allow(dead_code)]
 pub struct ServerTaskVariant<T, M, E>
 where
-    T: Send + Unpin + 'static,
-    M: Send + Unpin + 'static,
+    T: Send + 'static,
+    M: Send + 'static,
     E: RpcErrCodec,
 {
     pub seq: u64,
@@ -85,8 +90,8 @@ where
 
 impl<T, M, E> fmt::Debug for ServerTaskVariant<T, M, E>
 where
-    T: Send + Unpin + 'static,
-    M: fmt::Debug + Send + Unpin + 'static,
+    T: Send + 'static,
+    M: fmt::Debug + Send + 'static,
     E: RpcErrCodec + fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -105,8 +110,8 @@ where
 
 impl<T, M, E> ServerTaskDone<T, E> for ServerTaskVariant<T, M, E>
 where
-    T: Send + Unpin + 'static,
-    M: Send + Unpin + 'static,
+    T: Send + 'static,
+    M: Send + 'static,
     E: RpcErrCodec,
 {
     fn _set_result(&mut self, res: Result<(), E>) -> RespNoti<T> {
@@ -117,8 +122,8 @@ where
 
 impl<T, M, E> ServerTaskDecode<T> for ServerTaskVariant<T, M, E>
 where
-    T: Send + Unpin + 'static,
-    M: for<'b> Deserialize<'b> + Send + Unpin + 'static,
+    T: Send + 'static,
+    M: for<'b> Deserialize<'b> + Send + 'static,
     E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
@@ -132,8 +137,8 @@ where
 
 impl<T, M, E> ServerTaskAction for ServerTaskVariant<T, M, E>
 where
-    T: Send + Unpin + 'static,
-    M: Send + Unpin + 'static,
+    T: Send + 'static,
+    M: Send + 'static,
     E: RpcErrCodec,
 {
     fn get_action<'a>(&'a self) -> RpcAction<'a> {
@@ -143,8 +148,8 @@ where
 
 impl<T, M, E> ServerTaskEncode for ServerTaskVariant<T, M, E>
 where
-    T: Send + Unpin + 'static,
-    M: Serialize + Send + Unpin + 'static,
+    T: Send + 'static,
+    M: Serialize + Send + 'static,
     E: RpcErrCodec,
 {
     #[inline]
@@ -177,9 +182,9 @@ where
 #[allow(dead_code)]
 pub struct ServerTaskVariantFull<T, R, P, E>
 where
-    T: Send + Unpin + 'static,
-    R: Send + Unpin + 'static,
-    P: Send + Unpin + 'static,
+    T: Send + 'static,
+    R: Send + 'static,
+    P: Send + 'static,
     E: RpcErrCodec,
 {
     pub seq: u64,
@@ -194,9 +199,9 @@ where
 
 impl<T, R, P, E> fmt::Debug for ServerTaskVariantFull<T, R, P, E>
 where
-    T: Send + Unpin + 'static,
-    R: Send + Unpin + 'static + fmt::Debug,
-    P: Send + Unpin + 'static,
+    T: Send + 'static,
+    R: Send + 'static + fmt::Debug,
+    P: Send + 'static,
     E: RpcErrCodec + fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -211,9 +216,9 @@ where
 
 impl<T, R, P, E> ServerTaskDone<T, E> for ServerTaskVariantFull<T, R, P, E>
 where
-    T: Send + Unpin + 'static,
-    R: Send + Unpin + 'static,
-    P: Send + Unpin + 'static,
+    T: Send + 'static,
+    R: Send + 'static,
+    P: Send + 'static,
     E: RpcErrCodec,
 {
     fn _set_result(&mut self, res: Result<(), E>) -> RespNoti<T> {
@@ -224,9 +229,9 @@ where
 
 impl<T, R, P, E> ServerTaskDecode<T> for ServerTaskVariantFull<T, R, P, E>
 where
-    T: Send + Unpin + 'static,
-    R: for<'b> Deserialize<'b> + Send + Unpin + 'static,
-    P: Send + Unpin + 'static,
+    T: Send + 'static,
+    R: for<'b> Deserialize<'b> + Send + 'static,
+    P: Send + 'static,
     E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
@@ -249,9 +254,9 @@ where
 
 impl<T, R, P, E> ServerTaskAction for ServerTaskVariantFull<T, R, P, E>
 where
-    T: Send + Unpin + 'static,
-    R: Send + Unpin + 'static,
-    P: Send + Unpin + 'static,
+    T: Send + 'static,
+    R: Send + 'static,
+    P: Send + 'static,
     E: RpcErrCodec,
 {
     fn get_action<'a>(&'a self) -> RpcAction<'a> {
@@ -261,9 +266,9 @@ where
 
 impl<T, R, P, E> ServerTaskEncode for ServerTaskVariantFull<T, R, P, E>
 where
-    T: Send + Unpin + 'static,
-    R: Send + Unpin + 'static,
-    P: Send + Unpin + 'static + Serialize,
+    T: Send + 'static,
+    R: Send + 'static,
+    P: Send + 'static + Serialize,
     E: RpcErrCodec,
 {
     #[inline]
@@ -302,7 +307,7 @@ where
 /// It can be cloned anywhere.
 /// The user doesn't need to call it directly.
 pub struct RespNoti<T: Send + 'static>(
-    pub(crate) crossfire::MTx<Result<T, (u64, Option<RpcIntErr>)>>,
+    pub(crate) MTx<mpsc::List<Result<T, (u64, Option<RpcIntErr>)>>>,
 );
 
 impl<T: Send + 'static> Clone for RespNoti<T> {
@@ -313,7 +318,7 @@ impl<T: Send + 'static> Clone for RespNoti<T> {
 }
 
 impl<T: Send + 'static> RespNoti<T> {
-    pub fn new(tx: crossfire::MTx<Result<T, (u64, Option<RpcIntErr>)>>) -> Self {
+    pub fn new(tx: MTx<mpsc::List<Result<T, (u64, Option<RpcIntErr>)>>>) -> Self {
         Self(tx)
     }
 

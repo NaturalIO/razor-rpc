@@ -1,6 +1,7 @@
 use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
+use crossfire::{AsyncRx, MAsyncRx, mpmc, mpsc, null::CloseHandle};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -10,12 +11,15 @@ pub struct RpcServer<F>
 where
     F: ServerFacts,
 {
+    // join handles
     listeners_abort: Vec<(<F as AsyncExec>::AsyncHandle<()>, String)>,
     logger: Arc<LogFilter>,
     facts: Arc<F>,
     conn_ref_count: Arc<()>,
-    server_close_tx: Mutex<Option<crossfire::MTx<()>>>,
-    server_close_rx: crossfire::MAsyncRx<()>,
+    // because we have multiple listeners
+    server_close_tx: Mutex<Option<CloseHandle<mpmc::Null>>>,
+    // because we have multiple listeners
+    server_close_rx: MAsyncRx<mpmc::Null>,
 }
 
 impl<F> RpcServer<F>
@@ -23,7 +27,7 @@ where
     F: ServerFacts,
 {
     pub fn new(facts: Arc<F>) -> Self {
-        let (tx, rx) = crossfire::mpmc::unbounded_async();
+        let (tx, rx) = crossfire::mpmc::new::<mpmc::Null, _, _>();
         Self {
             listeners_abort: Vec::new(),
             logger: facts.new_logger(),
@@ -86,18 +90,18 @@ where
     }
 
     fn server_conn<T: ServerTransport, D: Dispatch>(
-        conn: T, facts: &F, dispatch: D, server_close_rx: crossfire::MAsyncRx<()>,
+        conn: T, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
     ) {
         let conn = Arc::new(conn);
 
-        let (done_tx, done_rx) = crossfire::mpsc::unbounded_async();
+        let (done_tx, done_rx) = mpsc::unbounded_async();
         let codec = Arc::new(D::Codec::default());
 
         let noti = RespNoti(done_tx);
         struct Reader<T: ServerTransport, D: Dispatch> {
             noti: RespNoti<D::RespTask>,
             conn: Arc<T>,
-            server_close_rx: crossfire::MAsyncRx<()>,
+            server_close_rx: MAsyncRx<mpmc::Null>,
             codec: Arc<D::Codec>,
             dispatch: D,
             logger: Arc<LogFilter>,
@@ -152,7 +156,7 @@ where
 
         struct Writer<T: ServerTransport, D: Dispatch> {
             codec: Arc<D::Codec>,
-            done_rx: crossfire::AsyncRx<Result<D::RespTask, (u64, Option<RpcIntErr>)>>,
+            done_rx: AsyncRx<mpsc::List<Result<D::RespTask, (u64, Option<RpcIntErr>)>>>,
             conn: Arc<T>,
             logger: Arc<LogFilter>,
         }

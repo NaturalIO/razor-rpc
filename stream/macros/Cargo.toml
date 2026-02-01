@@ -22,3 +22,13 @@ proc-macro = true
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
+
+
+[dev-dependencies]
+razor-stream = { path="../../stream" }
+crossfire = {version="3.0"}
+nix = "0"
+serde = "1"
+serde_derive = "1"
+io-buffer = "1"
+log = "0"

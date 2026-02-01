@@ -69,11 +69,11 @@ pub struct FileClientTaskOpen {
     #[field(res)]
     pub res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    pub sender: Option<MTx<FileClientTask>>,
+    pub sender: Option<MTx<mpsc::List<FileClientTask>>>,
 }
 
 impl FileClientTaskOpen {
-    pub fn new(sender: MTx<FileClientTask>, path: String) -> Self {
+    pub fn new(sender: MTx<mpsc::List<FileClientTask>>, path: String) -> Self {
         Self {
             common: Default::default(),
             sender: Some(sender),
@@ -109,11 +109,13 @@ pub struct FileClientTaskRead {
     #[field(res)]
     pub res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    pub sender: Option<MTx<FileClientTask>>,
+    pub sender: Option<MTx<mpsc::List<FileClientTask>>>,
 }
 
 impl FileClientTaskRead {
-    pub fn new(sender: MTx<FileClientTask>, inode: u64, offset: i64, len: usize) -> Self {
+    pub fn new(
+        sender: MTx<mpsc::List<FileClientTask>>, inode: u64, offset: i64, len: usize,
+    ) -> Self {
         Self {
             common: Default::default(),
             sender: Some(sender),
@@ -138,11 +140,13 @@ pub struct FileClientTaskWrite {
     #[field(res)]
     pub res: Option<Result<(), RpcError<Errno>>>,
     #[field(noti)]
-    pub sender: Option<MTx<FileClientTask>>,
+    pub sender: Option<MTx<mpsc::List<FileClientTask>>>,
 }
 
 impl FileClientTaskWrite {
-    pub fn new(sender: MTx<FileClientTask>, inode: u64, offset: i64, data: Buffer) -> Self {
+    pub fn new(
+        sender: MTx<mpsc::List<FileClientTask>>, inode: u64, offset: i64, data: Buffer,
+    ) -> Self {
         Self {
             common: Default::default(),
             sender: Some(sender),

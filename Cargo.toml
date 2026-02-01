@@ -24,7 +24,7 @@ io-buffer = "1"
 serde = "1"
 async-trait = "0"
 rustc-hash = "2"
-crossfire = "2.1"
+crossfire = "3.0"
 orb = "0"
 razor-stream = {path="stream/", version=">=0.3"}
 razor-rpc-macros = { path = "macros", version = ">=0.3" }

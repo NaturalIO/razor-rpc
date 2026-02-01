@@ -49,7 +49,8 @@ mod server_task_enum;
 ///   Must be of type `Option<Result<(), RpcError<E>>>` where `E` implements `razor_stream::error::RpcErrCodec`. Stores the final result of the task.
 ///
 /// * `#[field(noti)]`: (Optional) When used with `#[field(res)]`, triggers automatic `ClientTaskDone` implementation.
-///   Must be an `Option` wrapping a channel sender (e.g., `Option<crossfire::mpsc::MTx<Self>>`) to notify of task completion.
+///   Must be an `Option` wrapping a crossfire list channel MTx sender (e.g., `Option<crossfire::MTx<crossfire::mpsc::List<ParentTask>>>`) to notify of task completion.
+///   where the task has impl `Into` as `ParentTask` extracted with `crossfire::flavor::Queue::Item`
 ///
 /// ### Example of Automatic `ClientTaskDone`
 ///
@@ -85,7 +86,7 @@ mod server_task_enum;
 ///     #[field(res)]
 ///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
-///     noti: Option<MTx<Self>>,
+///     noti: Option<MTx<mpsc::List<Self>>>,
 /// }
 ///
 /// // Usage
@@ -162,7 +163,7 @@ pub fn client_task(
 ///     #[field(res)]
 ///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
-///     noti: Option<MTx<FileTask>>,
+///     noti: Option<MTx<mpsc::List<FileTask>>>,
 /// }
 ///
 /// // Action can be either with client_task
@@ -177,7 +178,7 @@ pub fn client_task(
 ///     #[field(res)]
 ///     res: Option<Result<(), RpcError<Errno>>>,
 ///     #[field(noti)]
-///     noti: Option<MTx<FileTask>>,
+///     noti: Option<MTx<mpsc::List<FileTask>>>,
 /// }
 ///
 /// #[client_task_enum(error=Errno)]
