@@ -14,7 +14,7 @@ razor-rpc-codec = {path="../codec", version="0", features=["msgpack"]}
 razor-rpc = {path="../", version="0"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
-crossfire = "3.0"
+crossfire = {version=">=3.1", path="../../crossfire/"}
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread"], optional=true }
 smol = {version = "2", optional=true }
 io-buffer = { version = "1.0.7", features = ["rand"] }
