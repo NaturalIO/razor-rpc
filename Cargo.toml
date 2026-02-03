@@ -3,7 +3,7 @@ members = ["codec", "macros", "stream", "stream/macros", "transport/tcp", "trans
 
 [package]
 name = "razor-rpc"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
@@ -26,8 +26,8 @@ async-trait = "0"
 rustc-hash = "2"
 crossfire = "3.0"
 orb = "0"
-razor-stream = {path="stream/", version=">=0.3"}
-razor-rpc-macros = { path = "macros", version = ">=0.3" }
+razor-stream = {path="stream/", version=">=0.4"}
+razor-rpc-macros = { path = "macros", version = ">=0.4" }
 
 [dev-dependencies]
 serde_derive = "1"
