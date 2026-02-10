@@ -1,51 +1,52 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::Cell;
 
-use sync_utils::waitgroup::{WaitGroup, WaitGroupGuard};
+use crossfire::waitgroup::{WaitGroup, WaitGroupGuard};
 
 pub struct Throttler {
-    wg: WaitGroup,
-    thresholds: AtomicUsize,
+    wg: WaitGroup<()>,
+    thresholds: Cell<usize>,
 }
+
+unsafe impl Sync for Throttler {}
 
 impl Throttler {
     pub fn new(thresholds: usize) -> Self {
-        Throttler { wg: WaitGroup::new(), thresholds: AtomicUsize::new(thresholds) }
+        Throttler { wg: WaitGroup::new((), thresholds), thresholds: Cell::new(thresholds) }
     }
 
     #[inline(always)]
     pub fn nearly_full(&self) -> bool {
-        self.wg.left() + 1 > self.thresholds.load(Ordering::Relaxed)
+        self.wg.get_left() + 1 > self.thresholds.get()
     }
 
     #[allow(dead_code)]
     #[inline(always)]
     pub fn is_full(&self) -> bool {
-        self.wg.left() >= self.thresholds.load(Ordering::Relaxed)
+        self.wg.get_left() >= self.thresholds.get()
     }
 
     #[inline(always)]
-    pub async fn throttle(&self) -> bool {
-        let target = self.thresholds.load(Ordering::Relaxed);
+    pub async fn throttle(&self) {
+        let target = self.thresholds.get();
         if target > 0 {
-            return self.wg.wait_to(target).await;
-        } else {
-            false
+            return self.wg.wait_async().await;
         }
     }
 
     #[inline(always)]
-    pub fn add_task(&self) -> WaitGroupGuard {
+    pub fn add_task(&self) -> WaitGroupGuard<()> {
         self.wg.add_guard()
     }
 
     #[allow(dead_code)]
     #[inline(always)]
     pub fn set_thresholds(&mut self, thresholds: usize) {
-        self.thresholds.store(thresholds, Ordering::Relaxed);
+        self.thresholds.set(thresholds);
+        self.wg.set_threshold(thresholds);
     }
 
     #[inline(always)]
     pub fn get_inflight_count(&self) -> usize {
-        self.wg.left()
+        self.wg.get_left()
     }
 }

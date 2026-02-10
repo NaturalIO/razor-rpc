@@ -13,13 +13,12 @@ use std::{
 
 use crate::client::task::ClientTaskDone;
 use crate::client::*;
-use crossfire::{stream::AsyncStream, *};
+use crossfire::{stream::AsyncStream, waitgroup::WaitGroupGuard, *};
 use rustc_hash::FxHashMap;
-use sync_utils::waitgroup::WaitGroupGuard;
 
 pub struct ClientTaskItem<T: ClientTask> {
     pub task: Option<T>,
-    _upstream: WaitGroupGuard,
+    _upstream: WaitGroupGuard<()>,
 }
 
 pub(crate) struct DelayTasksBatch<T: ClientTask> {
@@ -128,7 +127,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
 
     // register noti for task.
     #[inline(always)]
-    pub async fn reg_task(&self, task: F::Task, wg: WaitGroupGuard) {
+    pub async fn reg_task(&self, task: F::Task, wg: WaitGroupGuard<()>) {
         let _ = self
             .pending_tasks_sender
             .send(ClientTaskItem { task: Some(task), _upstream: wg })
