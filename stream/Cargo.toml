@@ -32,7 +32,6 @@ futures = "0.3"
 zerocopy = { version="0.8", features=["derive"]}
 io-buffer = "1"
 rustc-hash = "1.1"
-sync-utils = "0"
 serde = "1"
 crossfire = ">=3.1"
 

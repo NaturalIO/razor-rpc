@@ -28,7 +28,6 @@ use std::{
     },
     task::{Context, Poll},
 };
-use sync_utils::time::DelayedTime;
 
 /// ClientStream represents a client-side connection.
 ///
@@ -355,7 +354,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                 }
                 Ok(_) => {
                     if let Some(last_resp_ts) = self.last_resp_ts.as_ref() {
-                        last_resp_ts.store(DelayedTime::get(), Ordering::Relaxed);
+                        last_resp_ts.store(self.facts.get_timestamp(), Ordering::Release);
                     }
                 }
             }

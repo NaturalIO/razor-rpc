@@ -5,7 +5,7 @@ use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, mpsc};
 use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fmt, io};
 
 pub mod task;
@@ -96,6 +96,12 @@ pub trait ClientFacts: orb::AsyncRuntime + Send + Sync + Sized + 'static {
     #[inline(always)]
     fn get_client_id(&self) -> u64 {
         0
+    }
+
+    /// NOTE: you may overwrite this to use coarstime or quanta
+    #[inline]
+    fn get_timestamp(&self) -> u64 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
     }
 }
 
