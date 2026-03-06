@@ -19,6 +19,9 @@
 //! - Transports can be implemented with a raw socket, without the overhead of the HTTP protocol:
 //!   - [`razor-rpc-tcp`](https://docs.rs/razor-rpc-tcp): A TCP transport implementation.
 //!
+//! For Rpc tasks, we choose `Debug` instead of `Display` when logging, recommend use
+//! [format-attr](https://docs.rs/format-attr) to customized your message format.
+//!
 //! ## The Design
 //!
 //! Our implementation is designed to optimize throughput and lower
