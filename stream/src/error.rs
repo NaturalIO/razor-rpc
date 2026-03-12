@@ -116,8 +116,8 @@ pub const RPC_ERR_PREFIX: &str = "rpc_";
 /// Due to possible decode
 #[derive(thiserror::Error)]
 pub enum RpcError<E: RpcErrCodec> {
-    User(E),
-    Rpc(RpcIntErr),
+    User(#[from] E),
+    Rpc(#[from] RpcIntErr),
 }
 
 impl<E: RpcErrCodec> fmt::Display for RpcError<E> {
@@ -178,24 +178,10 @@ impl<E: RpcErrCodec + PartialEq> std::cmp::PartialEq<RpcError<E>> for RpcError<E
     }
 }
 
-impl<E: RpcErrCodec> From<E> for RpcError<E> {
-    #[inline]
-    fn from(e: E) -> Self {
-        Self::User(e)
-    }
-}
-
 impl From<&str> for RpcError<String> {
     #[inline]
     fn from(e: &str) -> Self {
         Self::User(e.to_string())
-    }
-}
-
-impl<E: RpcErrCodec> From<RpcIntErr> for RpcError<E> {
-    #[inline]
-    fn from(e: RpcIntErr) -> Self {
-        Self::Rpc(e)
     }
 }
 
