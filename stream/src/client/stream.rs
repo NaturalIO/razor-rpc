@@ -13,7 +13,7 @@ use crate::client::timer::ClientTaskTimer;
 use crate::{client::*, proto};
 use captains_log::filter::LogFilter;
 use crossfire::null::CloseHandle;
-use futures::pin_mut;
+use futures_util::pin_mut;
 use orb::prelude::*;
 use std::time::Duration;
 use std::{
