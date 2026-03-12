@@ -28,3 +28,6 @@ msgpack = ["dep:rmp-serde"]
 all-features = true
 # enable features in the documentation
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

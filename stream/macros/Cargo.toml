@@ -32,3 +32,6 @@ serde = "1"
 serde_derive = "1"
 io-buffer = "1"
 log = "0"
+
+[lints]
+workspace = true
