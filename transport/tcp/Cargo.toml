@@ -20,7 +20,6 @@ razor-stream = {path="../../stream", version=">=0.4"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 orb = { version="0"}
 captains-log = ">=0.15"
-async-trait = "0.1"
 crossfire = ">=3.1"
 io-buffer = "1"
 libc = "0"
