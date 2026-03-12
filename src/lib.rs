@@ -36,7 +36,8 @@
 //!
 //! 1. Choose your async runtime, and the codec.
 //! 2. Choose underlying transport, like [`razor-rpc-tcp`](https://docs.rs/razor-rpc-tcp)
-//! 3. define your service trait, the client is also generated along with the trait
+//! 3. define your service trait, the client is also generated along with the trait.
+//!    Also see the [error module](crate::error) for details on built-in error types and custom error type examples.
 //! 4. impl your service trait at server-side
 //! 5. Initialize ServerFacts (with configuration and runtime)
 //! 6. choose request dispatch method: [crate::server::dispatch]
@@ -44,7 +45,6 @@
 //! 8. Initialize ClientFacts (with configuration, runtime, and codec)
 //! 9. Setup a connection pool: [ClientPool](crate::client::ClientPool) or
 //!    [FailoverPool](crate::client::FailoverPool)
-//!
 //! ## Example
 //!
 //! ```rust

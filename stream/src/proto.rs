@@ -1,5 +1,16 @@
 //! # The protocol
 //!
+//!   The packet starts with a fixed-length header and is followed by a variable-length body.
+//! An [RpcAction](crate::proto::RpcAction) represents the type of packet.
+//! The action type is either numeric or a string.
+//!
+//! The request body contains a mandatory structured message and optional blob data.
+//!
+//! The response for each request either returns successfully with an optional structured message and
+//! optional blob data (the response can be empty), or it returns with an RpcError. The error type can
+//! be numeric (like a Unix errno), text (for user-customized errors), or a statically predefined error
+//! string (for errors that occur during socket communication or encoding/decoding).
+//!
 //! ## Request
 //!
 //! Fixed length of `ReqHead` = 32B

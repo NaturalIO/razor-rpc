@@ -1,3 +1,122 @@
+//! Error handling for razor-stream RPC framework.
+//!
+//! This module provides the error types and traits used for RPC error handling.
+//! It supports both internal RPC errors and user-defined custom errors.
+//!
+//! # Default Supported Error Types
+//!
+//! The following types have built-in `RpcErrCodec` implementations:
+//!
+//! - **Numeric types**: `i8`, `u8`, `i16`, `u16`, `i32`, `u32`
+//!   - Encoded as `u32` values for efficient transport
+//!   - Useful for errno-style error codes
+//!
+//! - **`()` (unit type)**
+//!   - Encoded as `0u32`
+//!   - Used when no additional error information is needed
+//!
+//! - **`String`**
+//!   - Encoded as UTF-8 bytes
+//!   - Useful for descriptive error messages
+//!
+//! - **`nix::errno::Errno`**
+//!   - Encoded as `u32` values
+//!   - For system-level error codes
+//!
+//! # Custom Error Types
+//!
+//! To use your own error type in RPC methods, implement the [`RpcErrCodec`] trait.
+//! There are two common approaches:
+//!
+//! ## Approach 1: Numeric Encoding (errno-style)
+//!
+//! Use this when you want compact, efficient numeric error codes.
+//!
+//! ```rust
+//! use num_enum::TryFromPrimitive;
+//! use razor_stream::{Codec, error::{RpcErrCodec, RpcIntErr, EncodedErr}};
+//!
+//! #[derive(Debug, Clone, Copy, PartialEq, TryFromPrimitive)]
+//! #[repr(u32)]
+//! pub enum MyErrorCode {
+//!     NotFound = 1,
+//!     PermissionDenied = 2,
+//!     Timeout = 3,
+//! }
+//!
+//! impl RpcErrCodec for MyErrorCode {
+//!     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+//!         EncodedErr::Num(*self as u32)
+//!     }
+//!
+//!     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
+//!         if let Ok(code) = buf {
+//!             return MyErrorCode::try_from(code).map_err(|_| ());
+//!         }
+//!         Err(())
+//!     }
+//!
+//!     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//!         std::fmt::Debug::fmt(self, f)
+//!     }
+//! }
+//! ```
+//!
+//! ## Approach 2: String Encoding (with strum)
+//!
+//! Use this when you want human-readable error strings that can be serialized/deserialized.
+//! Uses `EncodedErr::Static` to avoid heap allocation during encoding.
+//!
+//! ```rust
+//! use razor_stream::{Codec, error::{RpcErrCodec, RpcIntErr, EncodedErr}};
+//! use std::str::FromStr;
+//! use strum::{Display, EnumString};
+//!
+//! #[derive(Debug, Clone, Display, EnumString, PartialEq)]
+//! pub enum MyStringError {
+//!     #[strum(serialize = "not_found")]
+//!     NotFound,
+//!     #[strum(serialize = "permission_denied")]
+//!     PermissionDenied,
+//!     #[strum(serialize = "timeout")]
+//!     Timeout,
+//! }
+//!
+//! impl MyStringError {
+//!     /// Returns the static string representation for each variant.
+//!     /// This avoids the overhead of `to_string()` allocation.
+//!     fn as_static_str(&self) -> &'static str {
+//!         match self {
+//!             Self::NotFound => "not_found",
+//!             Self::PermissionDenied => "permission_denied",
+//!             Self::Timeout => "timeout",
+//!         }
+//!     }
+//! }
+//!
+//! impl RpcErrCodec for MyStringError {
+//!     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+//!         // Use EncodedErr::Static to avoid heap allocation
+//!         EncodedErr::Static(self.as_static_str())
+//!     }
+//!
+//!     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
+//!         // Decode with zero-copy: directly parse from &[u8] without allocating
+//!         if let Err(bytes) = buf {
+//!             // Safety: error strings are valid ASCII (subset of UTF-8), so unchecked is safe
+//!             let s = unsafe { std::str::from_utf8_unchecked(bytes) };
+//!             // Use strum's EnumString derive to parse from string
+//!             return MyStringError::from_str(s).map_err(|_| ());
+//!         }
+//!         Err(())
+//!     }
+//!
+//!     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//!         std::fmt::Display::fmt(self, f)
+//!     }
+//! }
+//! ```
+
 use crate::Codec;
 use std::fmt;
 
