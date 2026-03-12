@@ -70,9 +70,9 @@
 //! ```rust
 //! use razor_stream::{Codec, error::{RpcErrCodec, RpcIntErr, EncodedErr}};
 //! use std::str::FromStr;
-//! use strum::{Display, EnumString};
+//! use strum::{Display, EnumString, IntoStaticStr};
 //!
-//! #[derive(Debug, Clone, Display, EnumString, PartialEq)]
+//! #[derive(Debug, Clone, Display, EnumString, IntoStaticStr, PartialEq)]
 //! pub enum MyStringError {
 //!     #[strum(serialize = "not_found")]
 //!     NotFound,
@@ -82,22 +82,10 @@
 //!     Timeout,
 //! }
 //!
-//! impl MyStringError {
-//!     /// Returns the static string representation for each variant.
-//!     /// This avoids the overhead of `to_string()` allocation.
-//!     fn as_static_str(&self) -> &'static str {
-//!         match self {
-//!             Self::NotFound => "not_found",
-//!             Self::PermissionDenied => "permission_denied",
-//!             Self::Timeout => "timeout",
-//!         }
-//!     }
-//! }
-//!
 //! impl RpcErrCodec for MyStringError {
 //!     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
-//!         // Use EncodedErr::Static to avoid heap allocation
-//!         EncodedErr::Static(self.as_static_str())
+//!         // Use EncodedErr::Static to avoid heap allocation, with the help of strum::IntoStaticStr
+//!         EncodedErr::Static(self.into())
 //!     }
 //!
 //!     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
@@ -480,13 +468,15 @@ impl From<std::io::Error> for RpcIntErr {
 }
 
 /// A container for error message parse from / send into transport
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum EncodedErr {
     /// The ClientTransport should try the best to parse it from string with "rpc_" prefix
     Rpc(RpcIntErr),
     /// For nix errno and the like
     Num(u32),
-    /// only for server, the ClientTransport will not parse into static type
+    /// Only for server-side to encode err.
+    ///
+    /// The ClientTransport cannot decode into static type
     Static(&'static str),
     /// The ClientTransport will fallback to `Vec<u8>` after try to parse  RpcIntErr and  num
     Buf(Vec<u8>),
