@@ -30,7 +30,6 @@ log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
 zerocopy = { version="0.8", features=["derive"]}
 io-buffer = "1"
-rustc-hash = "1.1"
 serde = "1"
 crossfire = ">=3.1"
 futures-util = "0.3"

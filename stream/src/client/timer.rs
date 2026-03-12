@@ -3,7 +3,7 @@
 //! This module is only for transport implementation, not for the user.
 
 use std::{
-    collections::vec_deque::VecDeque,
+    collections::{BTreeMap, vec_deque::VecDeque},
     future::Future,
     mem::swap,
     pin::Pin,
@@ -14,7 +14,6 @@ use std::{
 use crate::client::task::ClientTaskDone;
 use crate::client::*;
 use crossfire::{stream::AsyncStream, waitgroup::WaitGroupGuard, *};
-use rustc_hash::FxHashMap;
 
 pub struct ClientTaskItem<T: ClientTask> {
     pub task: Option<T>,
@@ -22,7 +21,7 @@ pub struct ClientTaskItem<T: ClientTask> {
 }
 
 pub(crate) struct DelayTasksBatch<T: ClientTask> {
-    tasks: FxHashMap<u64, ClientTaskItem<T>>,
+    tasks: BTreeMap<u64, ClientTaskItem<T>>,
 }
 
 pub struct ClientTaskTimer<F: ClientFacts> {
@@ -31,7 +30,7 @@ pub struct ClientTaskTimer<F: ClientFacts> {
     pending_tasks_sender: MAsyncTx<mpsc::Array<ClientTaskItem<F::Task>>>,
     pending_task_count: AtomicU64,
 
-    sent_tasks: FxHashMap<u64, ClientTaskItem<F::Task>>, // sent_tasks of the current second
+    sent_tasks: BTreeMap<u64, ClientTaskItem<F::Task>>, // sent_tasks of the current second
     delay_tasks_queue: VecDeque<DelayTasksBatch<F::Task>>, // sent_tasks of past seconds
 
     min_delay_seq: u64,
@@ -55,7 +54,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
             pending_tasks_recv: pending_rx.into_stream(),
             pending_tasks_sender: pending_tx,
             pending_task_count: AtomicU64::new(0),
-            sent_tasks: FxHashMap::default(),
+            sent_tasks: BTreeMap::new(),
             min_delay_seq: 0,
             task_timeout,
             delay_tasks_queue: VecDeque::with_capacity(task_timeout),
@@ -172,7 +171,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
 
     pub fn adjust_task_queue(&mut self, facts: &F) {
         // 1. move wait_confirmed to overtime
-        let mut tasks_batch_in_second = FxHashMap::default();
+        let mut tasks_batch_in_second = BTreeMap::new();
         swap(&mut self.sent_tasks, &mut tasks_batch_in_second);
 
         // 2.notify req with timeout err
