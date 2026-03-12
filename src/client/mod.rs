@@ -17,13 +17,13 @@ pub type APIClientDefault<IO, C> = razor_stream::client::ClientDefault<APIClient
 
 pub trait APIClientFacts: ClientFacts<Task = APIClientReq> {
     fn create_pool_async<T: ClientTransport>(self: Arc<Self>, addr: &str) -> ClientPool<Self, T> {
-        return ClientPool::new(self.clone(), addr, 0);
+        ClientPool::new(self.clone(), addr, 0)
     }
 
     fn create_failover_async<T: ClientTransport>(
         self: Arc<Self>, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
     ) -> Arc<FailoverPool<Self, T>> {
-        return Arc::new(FailoverPool::new(self.clone(), addrs, round_robin, retry_limit, 0));
+        Arc::new(FailoverPool::new(self.clone(), addrs, round_robin, retry_limit, 0))
     }
 }
 
@@ -57,7 +57,7 @@ where
         // TODO should optimize one shot channel
         <C as ClientCaller>::send_req(&self.caller, make_req(&self.codec, service_method, req, tx))
             .await;
-        return process_res(&self.codec, rx.recv_async().await);
+        process_res(&self.codec, rx.recv_async().await)
     }
 }
 
@@ -108,7 +108,7 @@ where
         let (tx, rx) = oneshot::<APIClientReq>();
         // TODO should optimize one shot channel
         self.caller.send_req_blocking(make_req(&self.codec, service_method, req, tx));
-        return process_res(&self.codec, rx.recv());
+        process_res(&self.codec, rx.recv())
     }
 }
 
@@ -167,29 +167,25 @@ where
                 Ok(()) => {
                     if let Some(resp) = task.resp {
                         match codec.decode(&resp) {
-                            Ok(resp_msg) => return Ok(resp_msg),
-                            Err(()) => return Err(RpcIntErr::Decode.into()),
+                            Ok(resp_msg) => Ok(resp_msg),
+                            Err(()) => Err(RpcIntErr::Decode.into()),
                         }
                     } else {
-                        return Ok(Resp::default());
+                        Ok(Resp::default())
                     }
                 }
-                Err(EncodedErr::Rpc(e)) => {
-                    return Err(RpcError::Rpc(e));
-                }
+                Err(EncodedErr::Rpc(e)) => Err(RpcError::Rpc(e)),
                 Err(EncodedErr::Num(n)) => match E::decode(codec, Ok(n)) {
-                    Ok(e) => return Err(RpcError::User(e)),
-                    Err(()) => return Err(RpcIntErr::Decode.into()),
+                    Ok(e) => Err(RpcError::User(e)),
+                    Err(()) => Err(RpcIntErr::Decode.into()),
                 },
                 Err(EncodedErr::Buf(buf)) => match E::decode(codec, Err(&buf)) {
-                    Ok(e) => return Err(RpcError::User(e)),
-                    Err(()) => return Err(RpcIntErr::Decode.into()),
+                    Ok(e) => Err(RpcError::User(e)),
+                    Err(()) => Err(RpcIntErr::Decode.into()),
                 },
                 _ => unreachable!(),
             }
         }
-        Err(_) => {
-            return Err(RpcIntErr::Internal.into());
-        }
+        Err(_) => Err(RpcIntErr::Internal.into()),
     }
 }

@@ -32,7 +32,7 @@ use std::time::Duration;
 /// considering:
 /// - The task incoming might never stop until faulty pool remove from pools collection
 /// - If ping mixed with task with real business, might blocked due to throttler of in-flight
-/// message in the stream.
+///   message in the stream.
 pub struct ClientPool<F: ClientFacts, P: ClientTransport> {
     tx_async: MAsyncTx<mpmc::Array<F::Task>>,
     tx: MTx<mpmc::Array<F::Task>>,
@@ -242,17 +242,15 @@ impl<F: ClientFacts, P: ClientTransport> ClientPoolInner<F, P> {
                                     Ok(task) => {
                                         if stream.get_inflight_count() > 0
                                             && self.get_workers() == 1
-                                        {
-                                            if self
+                                            && self
                                                 .worker_count
                                                 .compare_exchange(1, 2, SeqCst, Relaxed)
                                                 .is_ok()
-                                            {
-                                                // there's might be a lag to connect,
-                                                // so we are spawning identity with new worker,
-                                                worker_id = 1;
-                                                self.clone().spawn_worker(0);
-                                            }
+                                        {
+                                            // there's might be a lag to connect,
+                                            // so we are spawning identity with new worker,
+                                            worker_id = 1;
+                                            self.clone().spawn_worker(0);
                                         }
                                         if stream.send_task(task, true).await.is_err() {
                                             self.set_err();

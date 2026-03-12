@@ -69,15 +69,8 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
     }
 
     pub fn clean_pending_tasks(&mut self, facts: &F) {
-        loop {
-            match self.pending_tasks_recv.try_recv() {
-                Ok(task) => {
-                    self.got_pending_task(task);
-                }
-                Err(_) => {
-                    break;
-                }
-            }
+        while let Ok(task) = self.pending_tasks_recv.try_recv() {
+            self.got_pending_task(task);
         }
         let mut task_seqs: Vec<u64> = Vec::with_capacity(self.sent_tasks.len());
         for (key, _) in self.sent_tasks.iter() {
@@ -104,15 +97,8 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
     }
 
     pub fn check_pending_tasks_empty(&mut self) -> bool {
-        loop {
-            match self.pending_tasks_recv.try_recv() {
-                Ok(task) => {
-                    self.got_pending_task(task);
-                }
-                Err(_) => {
-                    break;
-                }
-            }
+        while let Ok(task) = self.pending_tasks_recv.try_recv() {
+            self.got_pending_task(task);
         }
         if !self.sent_tasks.is_empty() {
             return false;
@@ -163,19 +149,14 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
     }
 
     #[inline]
-    pub fn poll_sent_task<'a>(&mut self, ctx: &mut Context) -> bool {
+    pub fn poll_sent_task(&mut self, ctx: &mut Context) -> bool {
         let mut got = false;
         // Need to poll_item in order to register waker
-        loop {
-            match self.pending_tasks_recv.poll_item(ctx) {
-                Poll::Ready(Some(_task)) => {
-                    self.got_pending_task(_task);
-                    got = true;
-                    continue;
-                }
-                _ => break, // empty or disconnect
-            }
+        while let Poll::Ready(Some(_task)) = self.pending_tasks_recv.poll_item(ctx) {
+            self.got_pending_task(_task);
+            got = true;
         }
+        // break on empty or disconnect
         got
     }
 
@@ -204,12 +185,8 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
                 for (_seq, mut task_item) in real_timeout.tasks {
                     let mut task = task_item.task.take().unwrap();
                     let seq = task.seq();
-                    if min_seq == 0 {
+                    if min_seq == 0 || min_seq > seq {
                         min_seq = seq;
-                    } else {
-                        if min_seq > seq {
-                            min_seq = seq;
-                        }
                     }
                     warn!("{} task {:?} is timeout", self.conn_id, task,);
                     task.set_rpc_error(RpcIntErr::Timeout);
@@ -243,10 +220,8 @@ where
         if _self.noti.reg_stopped_flag.load(Ordering::SeqCst) {
             return Poll::Ready(Err(()));
         }
-        if _self.noti.poll_sent_task(ctx) {
-            if _self.noti.processed_seq >= _self.target_seq {
-                return Poll::Ready(Ok(()));
-            }
+        if _self.noti.poll_sent_task(ctx) && _self.noti.processed_seq >= _self.target_seq {
+            return Poll::Ready(Ok(()));
         }
         Poll::Pending
     }

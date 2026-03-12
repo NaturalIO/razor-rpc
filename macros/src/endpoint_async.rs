@@ -54,18 +54,16 @@ pub fn endpoint_async(args: TokenStream, input: TokenStream) -> TokenStream {
 fn get_result_type_from_future(ty: &syn::Type) -> Option<&syn::Type> {
     if let syn::Type::ImplTrait(type_impl) = ty {
         for bound in &type_impl.bounds {
-            if let syn::TypeParamBound::Trait(trait_bound) = bound {
-                if let Some(segment) = trait_bound.path.segments.last() {
-                    if segment.ident == "Future" {
-                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                            for arg in &args.args {
-                                if let syn::GenericArgument::Binding(binding) = arg {
-                                    if binding.ident == "Output" {
-                                        return Some(&binding.ty);
-                                    }
-                                }
-                            }
-                        }
+            if let syn::TypeParamBound::Trait(trait_bound) = bound
+                && let Some(segment) = trait_bound.path.segments.last()
+                && segment.ident == "Future"
+                && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+            {
+                for arg in &args.args {
+                    if let syn::GenericArgument::Binding(binding) = arg
+                        && binding.ident == "Output"
+                    {
+                        return Some(&binding.ty);
                     }
                 }
             }
@@ -77,10 +75,10 @@ fn get_result_type_from_future(ty: &syn::Type) -> Option<&syn::Type> {
 fn check_return_type(return_type: &syn::ReturnType, returns_impl_future: bool) -> bool {
     if returns_impl_future {
         // For impl Future, we need to check the Output type
-        if let syn::ReturnType::Type(_, ty) = return_type {
-            if let Some(output_type) = get_result_type_from_future(ty) {
-                return check_result_type(output_type);
-            }
+        if let syn::ReturnType::Type(_, ty) = return_type
+            && let Some(output_type) = get_result_type_from_future(ty)
+        {
+            return check_result_type(output_type);
         }
         false
     } else {
@@ -94,22 +92,17 @@ fn check_return_type(return_type: &syn::ReturnType, returns_impl_future: bool) -
 
 fn check_result_type(ty: &syn::Type) -> bool {
     // Check if type is Result<_, RpcError<_>>
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Result" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    // Check if second generic argument is RpcError
-                    if args.args.len() == 2 {
-                        if let syn::GenericArgument::Type(syn::Type::Path(error_type)) =
-                            &args.args[1]
-                        {
-                            if let Some(error_segment) = error_type.path.segments.last() {
-                                return error_segment.ident == "RpcError";
-                            }
-                        }
-                    }
-                }
-            }
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == "Result"
+        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+    {
+        // Check if second generic argument is RpcError
+        if args.args.len() == 2
+            && let syn::GenericArgument::Type(syn::Type::Path(error_type)) = &args.args[1]
+            && let Some(error_segment) = error_type.path.segments.last()
+        {
+            return error_segment.ident == "RpcError";
         }
     }
     false

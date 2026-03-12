@@ -35,23 +35,23 @@ impl<D: APIDispatchTrait> Dispatch for APIDispatch<D> {
     async fn dispatch_req<'a>(
         &'a self, codec: &Arc<Self::Codec>, req: RpcSvrReq<'a>, noti: RespNoti<Self::RespTask>,
     ) -> Result<(), ()> {
-        if let RpcAction::Str(action) = req.action {
-            if let Some((service, method)) = action.split_once('.') {
-                return self
-                    .0
-                    .dispatch(APIServerReq::<Self::Codec> {
-                        seq: req.seq,
-                        service: service.to_string(),
-                        method: method.to_string(),
-                        req: Some(req.msg.to_vec()),
-                        codec: codec.clone(),
-                        noti,
-                    })
-                    .await;
-            }
+        if let RpcAction::Str(action) = req.action
+            && let Some((service, method)) = action.split_once('.')
+        {
+            return self
+                .0
+                .dispatch(APIServerReq::<Self::Codec> {
+                    seq: req.seq,
+                    service: service.to_string(),
+                    method: method.to_string(),
+                    req: Some(req.msg.to_vec()),
+                    codec: codec.clone(),
+                    noti,
+                })
+                .await;
         }
         warn!("{:?} invalid action", req);
-        return Err(());
+        Err(())
     }
 }
 
@@ -85,6 +85,6 @@ impl<C: Codec, S: ServiceStatic<C> + Clone> APIDispatchTrait for Inline<C, S> {
     #[inline]
     async fn dispatch(&self, req: APIServerReq<C>) -> Result<(), ()> {
         self.service.serve(req).await;
-        return Ok(());
+        Ok(())
     }
 }

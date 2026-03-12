@@ -121,7 +121,7 @@ where
             }
             Ok(task) => {
                 let handle = self.task_handle.clone();
-                if let Err(_) = (handle)(task).await {
+                if (handle)(task).await.is_err() {
                     error!("action {:?} seq={} dispatch err", req.action, req.seq);
                     return Err(());
                 }

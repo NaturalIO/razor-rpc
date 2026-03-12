@@ -78,10 +78,16 @@ pub struct ServiceMuxDyn<C: Codec> {
     map: FxHashMap<&'static str, Arc<dyn ServiceDyn<C>>>,
 }
 
+impl<C: Codec> Default for ServiceMuxDyn<C> {
+    fn default() -> Self {
+        Self { map: Default::default() }
+    }
+}
+
 impl<C: Codec> ServiceMuxDyn<C> {
     #[inline]
     pub fn new() -> Self {
-        Self { map: Default::default() }
+        Default::default()
     }
 
     #[inline]
@@ -94,13 +100,11 @@ impl<C: Codec> ServiceStatic<C> for ServiceMuxDyn<C> {
     const SERVICE_NAME: &'static str = "";
 
     #[inline(always)]
-    fn serve(&self, req: APIServerReq<C>) -> impl Future<Output = ()> + Send + Sized {
-        async move {
-            if let Some(service) = self.map.get(req.service.as_str()) {
-                service.serve_dyn(req).await
-            } else {
-                req.set_rpc_error(RpcIntErr::Service);
-            }
+    async fn serve(&self, req: APIServerReq<C>) {
+        if let Some(service) = self.map.get(req.service.as_str()) {
+            service.serve_dyn(req).await
+        } else {
+            req.set_rpc_error(RpcIntErr::Service);
         }
     }
 }

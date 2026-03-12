@@ -3,13 +3,14 @@ pub trait AllocateBuf: 'static + Sized + Send {
     /// Alloc buffer or reserve space to fit blob_len inside the Buffer.
     ///
     /// When size is not enough, return None
-    fn reserve<'a>(&'a mut self, _blob_len: i32) -> Option<&'a mut [u8]>;
+    fn reserve(&mut self, _blob_len: i32) -> Option<&mut [u8]>;
 }
 
 /// If Option is None, create a new `Vec<u8>` on call, otherwise grow to fit the requirement
 impl AllocateBuf for Option<Vec<u8>> {
     #[inline]
-    fn reserve<'a>(&'a mut self, blob_len: i32) -> Option<&'a mut [u8]> {
+    #[allow(clippy::uninit_vec)]
+    fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
         let blob_len = blob_len as usize;
         if let Some(buf) = self.as_mut() {
             if buf.len() != blob_len {
@@ -30,7 +31,7 @@ impl AllocateBuf for Option<Vec<u8>> {
 /// Grow to fit the requirement
 impl AllocateBuf for Vec<u8> {
     #[inline]
-    fn reserve<'a>(&'a mut self, blob_len: i32) -> Option<&'a mut [u8]> {
+    fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
         let blob_len = blob_len as usize;
         if self.len() != blob_len {
             if self.capacity() < blob_len {
@@ -48,7 +49,7 @@ impl AllocateBuf for Vec<u8> {
 /// RPC will return encode error or decode error when the size is not enough.
 impl AllocateBuf for Option<io_buffer::Buffer> {
     #[inline]
-    fn reserve<'a>(&'a mut self, blob_len: i32) -> Option<&'a mut [u8]> {
+    fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
         if let Some(buf) = self.as_mut() {
             let blob_len = blob_len as usize;
             if buf.len() != blob_len {
@@ -57,13 +58,11 @@ impl AllocateBuf for Option<io_buffer::Buffer> {
                 }
                 buf.set_len(blob_len);
             }
+        } else if let Ok(v) = io_buffer::Buffer::alloc(blob_len) {
+            self.replace(v);
         } else {
-            if let Ok(v) = io_buffer::Buffer::alloc(blob_len) {
-                self.replace(v);
-            } else {
-                // alloc failed
-                return None;
-            }
+            // alloc failed
+            return None;
         }
         return self.as_deref_mut();
     }
@@ -74,7 +73,7 @@ impl AllocateBuf for Option<io_buffer::Buffer> {
 /// RPC will return encode error or decode error when the size is not enough.
 impl AllocateBuf for io_buffer::Buffer {
     #[inline]
-    fn reserve<'a>(&'a mut self, blob_len: i32) -> Option<&'a mut [u8]> {
+    fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
         let blob_len = blob_len as usize;
         if self.len() != blob_len {
             if self.capacity() < blob_len {

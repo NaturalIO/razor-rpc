@@ -5,25 +5,25 @@ use syn::{Data, DeriveInput, Fields, Lit, Meta, NestedMeta, Variant, parse_macro
 
 fn get_action_attribute(variant: &Variant) -> Option<Meta> {
     for attr in &variant.attrs {
-        if attr.path.is_ident("action") {
-            if let Ok(Meta::List(meta_list)) = attr.parse_meta() {
-                let nested = meta_list.nested.first().cloned();
-                if let Some(NestedMeta::Lit(lit)) = nested {
-                    if meta_list.nested.len() > 1 {
-                        panic!("Only one action is allowed per variant");
-                    }
-                    return Some(Meta::NameValue(syn::MetaNameValue {
-                        path: syn::Path::from(syn::Ident::new(
-                            "action",
-                            proc_macro2::Span::call_site(),
-                        )),
-                        eq_token: syn::token::Eq::default(),
-                        lit,
-                    }));
-                } else if let Some(NestedMeta::Meta(Meta::Path(path))) = nested {
-                    // Handle enum variant like Action::Open
-                    return Some(Meta::Path(path));
+        if attr.path.is_ident("action")
+            && let Ok(Meta::List(meta_list)) = attr.parse_meta()
+        {
+            let nested = meta_list.nested.first().cloned();
+            if let Some(NestedMeta::Lit(lit)) = nested {
+                if meta_list.nested.len() > 1 {
+                    panic!("Only one action is allowed per variant");
                 }
+                return Some(Meta::NameValue(syn::MetaNameValue {
+                    path: syn::Path::from(syn::Ident::new(
+                        "action",
+                        proc_macro2::Span::call_site(),
+                    )),
+                    eq_token: syn::token::Eq::default(),
+                    lit,
+                }));
+            } else if let Some(NestedMeta::Meta(Meta::Path(path))) = nested {
+                // Handle enum variant like Action::Open
+                return Some(Meta::Path(path));
             }
         }
     }

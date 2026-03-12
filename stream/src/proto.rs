@@ -47,7 +47,7 @@
 //! Variable length message components:
 //! - `msg_len`
 //! - `blob_len`
-///
+
 use crate::client::task::ClientTask;
 use crate::server::task::ServerTaskEncode;
 use crate::{Codec, error::*};
@@ -99,7 +99,7 @@ impl RpcActionOwned {
 
 /// Fixed-length header for request
 #[derive(FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout, PartialEq, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct ReqHead {
     pub magic: little_endian::U16,
     pub ver: u8,
@@ -133,7 +133,7 @@ impl ReqHead {
 
     #[inline(always)]
     fn _write_head(
-        buf: &mut Vec<u8>, client_id: u64, action: u32, seq: u64, msg_len: u32, blob_len: i32,
+        buf: &mut [u8], client_id: u64, action: u32, seq: u64, msg_len: u32, blob_len: i32,
     ) {
         // NOTE: We are directly init ReqHead on the buffer with unsafe, check carefully don't miss
         // a field
@@ -241,7 +241,7 @@ impl fmt::Debug for ReqHead {
 
 /// Fixed-length header for response
 #[derive(FromBytes, IntoBytes, Unaligned, Immutable, KnownLayout, PartialEq, Clone)]
-#[repr(packed)]
+#[repr(C, packed)]
 pub struct RespHead {
     pub magic: little_endian::U16,
     pub ver: u8,
@@ -345,7 +345,7 @@ impl RespHead {
         }
         match e {
             EncodedErr::Num(n) => {
-                Self::_write_head::<L>(logger, buf, RESP_FLAG_HAS_ERRNO, seq, n as u32, 0);
+                Self::_write_head::<L>(logger, buf, RESP_FLAG_HAS_ERRNO, seq, n, 0);
             }
             EncodedErr::Rpc(s) => {
                 write_err!(s.as_bytes());
@@ -360,9 +360,8 @@ impl RespHead {
     }
 
     #[inline]
-    fn _write_head<L>(
-        logger: &L, buf: &mut Vec<u8>, flag: u8, seq: u64, msg_len: u32, blob_len: i32,
-    ) where
+    fn _write_head<L>(logger: &L, buf: &mut [u8], flag: u8, seq: u64, msg_len: u32, blob_len: i32)
+    where
         L: captains_log::filter::Filter,
     {
         let header = Self::mut_from_bytes(&mut buf[0..RPC_RESP_HEADER_LEN]).expect("fill header");

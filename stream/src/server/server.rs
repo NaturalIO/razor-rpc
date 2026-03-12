@@ -121,7 +121,7 @@ where
                 loop {
                     match self.conn.read_req(&self.logger, &self.server_close_rx).await {
                         Ok(req) => {
-                            if req.action == RpcAction::Num(0) && req.msg.len() == 0 {
+                            if req.action == RpcAction::Num(0) && req.msg.is_empty() {
                                 // ping request
                                 self.send_quick_resp(req.seq, None)?;
                             } else {
@@ -132,7 +132,7 @@ where
                                     .await
                                     .is_err()
                                 {
-                                    self.send_quick_resp(seq, Some(RpcIntErr::Decode.into()))?;
+                                    self.send_quick_resp(seq, Some(RpcIntErr::Decode))?;
                                 }
                             }
                         }
@@ -210,7 +210,7 @@ where
     /// - drop the close channel to notify connection read coroutines.
     /// - the writer coroutines will exit after all the reference of RespNoti channel drop to 0
     /// - wait for connection coroutines to exit with a timeout defined by
-    /// ServerConfig.server_close_wait
+    ///   ServerConfig.server_close_wait
     pub async fn close(&mut self) {
         // close listeners
         for h in self.listeners_abort.drain(0..) {

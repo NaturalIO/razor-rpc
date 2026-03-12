@@ -38,7 +38,7 @@ impl ClientTaskDecode for APIClientReq {
     #[inline]
     fn decode_resp<C: Codec>(&mut self, _codec: &C, buf: &[u8]) -> Result<(), ()> {
         // Ignore the Codec, as we don't known the resp type yet
-        if buf.len() > 0 {
+        if !buf.is_empty() {
             self.resp.replace(buf.to_vec());
         }
         Ok(())
@@ -49,7 +49,7 @@ impl ClientTaskDone for APIClientReq {
     #[inline]
     fn set_custom_error<C: Codec>(&mut self, _codec: &C, e: EncodedErr) {
         // Ignore the Codec, as we don't known the error type yet
-        self.res.replace(Err(e.into()));
+        self.res.replace(Err(e));
     }
 
     #[inline]
@@ -64,7 +64,7 @@ impl ClientTaskDone for APIClientReq {
 
     #[inline]
     fn done(mut self) {
-        let _ = self.noti.take().unwrap().send(self);
+        self.noti.take().unwrap().send(self);
     }
 }
 

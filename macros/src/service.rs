@@ -5,18 +5,16 @@ use syn::{FnArg, ImplItem, Item, ReturnType, Type, parse_macro_input};
 fn get_result_type_from_future(ty: &syn::Type) -> Option<&syn::Type> {
     if let syn::Type::ImplTrait(type_impl) = ty {
         for bound in &type_impl.bounds {
-            if let syn::TypeParamBound::Trait(trait_bound) = bound {
-                if let Some(segment) = trait_bound.path.segments.last() {
-                    if segment.ident == "Future" {
-                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                            for arg in &args.args {
-                                if let syn::GenericArgument::Binding(binding) = arg {
-                                    if binding.ident == "Output" {
-                                        return Some(&binding.ty);
-                                    }
-                                }
-                            }
-                        }
+            if let syn::TypeParamBound::Trait(trait_bound) = bound
+                && let Some(segment) = trait_bound.path.segments.last()
+                && segment.ident == "Future"
+                && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+            {
+                for arg in &args.args {
+                    if let syn::GenericArgument::Binding(binding) = arg
+                        && binding.ident == "Output"
+                    {
+                        return Some(&binding.ty);
                     }
                 }
             }
@@ -62,8 +60,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                     } else {
                                         None
                                     }
-                                })
-                                .nth(0)
+                                }).next()
                                 .expect("Method should have one argument besides &self");
 
                             let is_async_method = method.sig.asyncness.is_some();
@@ -79,7 +76,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 &method.sig.output
                             {
                                 if let Type::Path(type_path) = &**ty {
-                                    type_path.path.segments.last().map_or(false, |segment| {
+                                    type_path.path.segments.last().is_some_and(|segment| {
                                         segment.ident == "Pin" && type_path.path.segments.len() > 1
                                     })
                                 } else {

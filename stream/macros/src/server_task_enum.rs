@@ -135,12 +135,10 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
             }
 
             // Logic for where_clauses_for_decode (conditional)
-            let inner_type_exists = match &variant.fields {
-                Fields::Unnamed(fields) if fields.unnamed.len() == 1 => true,
-                _ => false,
-            };
+            let inner_type_exists =
+                matches!(&variant.fields, Fields::Unnamed(fields) if fields.unnamed.len() == 1);
 
-            if actions.len() > 1 || (actions.len() == 0 && inner_type_exists) {
+            if actions.len() > 1 || (actions.is_empty() && inner_type_exists) {
                 where_clauses_for_decode.push(quote! {
                     #inner_type: razor_stream::server::task::ServerTaskDecode<#resp_type> + razor_stream::server::task::ServerTaskAction
                 });
@@ -303,12 +301,12 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
 
 fn get_action_attribute(variant: &Variant) -> Vec<NestedMeta> {
     for attr in &variant.attrs {
-        if attr.path.is_ident("action") {
-            if let Ok(Meta::List(meta_list)) = attr.parse_meta() {
-                let actions: Vec<NestedMeta> = meta_list.nested.into_iter().collect();
-                if !actions.is_empty() {
-                    return actions;
-                }
+        if attr.path.is_ident("action")
+            && let Ok(Meta::List(meta_list)) = attr.parse_meta()
+        {
+            let actions: Vec<NestedMeta> = meta_list.nested.into_iter().collect();
+            if !actions.is_empty() {
+                return actions;
             }
         }
     }

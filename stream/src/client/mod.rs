@@ -81,8 +81,9 @@ pub trait ClientFacts: orb::AsyncRuntime + Send + Sync + Sized + 'static {
     fn get_config(&self) -> &ClientConfig;
 
     /// Construct a [captains_log::filter::Filter](https://docs.rs/captains-log/latest/captains_log/filter/trait.Filter.html) to oganize log of a client
+    ///
+    /// TODO: Fix the logger interface
     fn new_logger(&self) -> Arc<LogFilter>;
-    /// TODO Fix the logger interface
 
     /// How to deal with error
     ///

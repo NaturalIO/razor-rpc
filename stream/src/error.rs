@@ -121,7 +121,7 @@ use crate::Codec;
 use std::fmt;
 
 /// "rpc_" prefix is reserved for internal error, you should avoid conflict with it
-pub const RPC_ERR_PREFIX: &'static str = "rpc_";
+pub const RPC_ERR_PREFIX: &str = "rpc_";
 
 /// A error type defined by client-side user logic
 ///
@@ -152,10 +152,10 @@ impl<E: RpcErrCodec> fmt::Debug for RpcError<E> {
 impl<E: RpcErrCodec> std::cmp::PartialEq<RpcIntErr> for RpcError<E> {
     #[inline]
     fn eq(&self, other: &RpcIntErr) -> bool {
-        if let Self::Rpc(r) = self {
-            if r == other {
-                return true;
-            }
+        if let Self::Rpc(r) = self
+            && r == other
+        {
+            return true;
         }
         false
     }
@@ -324,7 +324,7 @@ macro_rules! impl_rpc_error_for_num {
             #[inline(always)]
             fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
                 if let Ok(i) = buf {
-                    if i <= $t::max as u32 {
+                    if i <= $t::MAX as u32 {
                         return Ok(i as Self);
                     }
                 }
@@ -354,10 +354,10 @@ impl RpcErrCodec for nix::errno::Errno {
 
     #[inline(always)]
     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Ok(i) = buf {
-            if i <= i32::max as u32 {
-                return Ok(Self::from_raw(i as i32));
-            }
+        if let Ok(i) = buf
+            && i <= i32::MAX as u32
+        {
+            return Ok(Self::from_raw(i as i32));
         }
         Err(())
     }
@@ -376,10 +376,10 @@ impl RpcErrCodec for () {
 
     #[inline(always)]
     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Ok(i) = buf {
-            if i == 0 {
-                return Ok(());
-            }
+        if let Ok(i) = buf
+            && i == 0
+        {
+            return Ok(());
         }
         Err(())
     }
@@ -397,10 +397,10 @@ impl RpcErrCodec for String {
     }
     #[inline(always)]
     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Err(s) = buf {
-            if let Ok(s) = str::from_utf8(s) {
-                return Ok(s.to_string());
-            }
+        if let Err(s) = buf
+            && let Ok(s) = str::from_utf8(s)
+        {
+            return Ok(s.to_string());
         }
         Err(())
     }
@@ -415,7 +415,7 @@ impl RpcErrCodec for String {
 ///
 /// **NOTE**:
 /// - This error type is serialized in string, "rpc_" prefix is reserved for internal error, you
-/// should avoid conflict with it.
+///   should avoid conflict with it.
 /// - We presume the variants less than RpcIntErr::Method is retriable errors
 #[derive(
     strum::Display,
@@ -467,7 +467,7 @@ impl fmt::Debug for RpcIntErr {
 
 impl RpcIntErr {
     #[inline]
-    pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         self.as_ref().as_bytes()
     }
 }
@@ -494,7 +494,7 @@ pub enum EncodedErr {
 
 impl EncodedErr {
     #[inline]
-    pub fn try_as_str<'a>(&'a self) -> Result<&'a str, ()> {
+    pub fn try_as_str(&self) -> Result<&str, ()> {
         match self {
             Self::Static(s) => return Ok(s),
             Self::Buf(b) => {

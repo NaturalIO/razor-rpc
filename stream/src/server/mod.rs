@@ -141,7 +141,7 @@ impl task::ServerTaskEncode for RpcSvrResp {
             Ok(_) => {
                 if let Some(msg) = self.msg.as_ref() {
                     use std::io::Write;
-                    buf.write_all(&msg).expect("fill msg");
+                    buf.write_all(msg).expect("fill msg");
                     return (self.seq, Ok((msg.len(), self.blob.as_deref())));
                 } else {
                     return (self.seq, Ok((0, self.blob.as_deref())));

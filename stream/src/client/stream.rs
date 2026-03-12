@@ -45,14 +45,12 @@ pub struct ClientStream<F: ClientFacts, P: ClientTransport> {
 impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
     /// Make a streaming connection to the server, returns [ClientStream] on success
     #[inline]
-    pub fn connect(
+    pub async fn connect(
         facts: Arc<F>, addr: &str, conn_id: &str, last_resp_ts: Option<Arc<AtomicU64>>,
-    ) -> impl Future<Output = Result<Self, RpcIntErr>> + Send {
-        async move {
-            let client_id = facts.get_client_id();
-            let conn = P::connect(addr, conn_id, facts.get_config()).await?;
-            Ok(Self::new(facts, conn, client_id, conn_id.to_string(), last_resp_ts))
-        }
+    ) -> Result<Self, RpcIntErr> {
+        let client_id = facts.get_client_id();
+        let conn = P::connect(addr, conn_id, facts.get_config()).await?;
+        Ok(Self::new(facts, conn, client_id, conn_id.to_string(), last_resp_ts))
     }
 
     #[inline]
@@ -502,7 +500,7 @@ where
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         let mut _self = self.get_mut();
         // In case ticker not fire, and ensure ticker schedule after ready
-        while let Poll::Ready(_) = _self.inv.as_mut().poll_tick(ctx) {
+        while _self.inv.as_mut().poll_tick(ctx).is_ready() {
             _self.client.time_reach();
         }
         if _self.client.has_err.load(Ordering::Relaxed) {

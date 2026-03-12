@@ -74,15 +74,13 @@ impl ServerTaskEncode for APIServerResp {
         match self.res.take().unwrap() {
             Ok(()) => {
                 if let Some(msg) = self.msg.as_ref() {
-                    buf.write_all(&msg).expect("fill msg buf");
-                    return (self.seq, Ok((msg.len(), None)));
+                    buf.write_all(msg).expect("fill msg buf");
+                    (self.seq, Ok((msg.len(), None)))
                 } else {
-                    return (self.seq, Ok((0, None)));
+                    (self.seq, Ok((0, None)))
                 }
             }
-            Err(e) => {
-                return (self.seq, Err(e));
-            }
+            Err(e) => (self.seq, Err(e)),
         }
     }
 }

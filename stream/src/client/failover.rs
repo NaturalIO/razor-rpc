@@ -71,7 +71,7 @@ where
             round_robin,
             facts: facts.clone(),
             retry_limit,
-            retry_tx: retry_tx.into(),
+            retry_tx,
             ver: AtomicU64::new(1),
             rr_counter: AtomicUsize::new(0),
             pool_channel_size,
@@ -79,7 +79,7 @@ where
         });
         let mut pools = Vec::with_capacity(addrs.len());
         for addr in addrs.iter() {
-            let pool = ClientPool::new(inner.clone(), &addr, pool_channel_size);
+            let pool = ClientPool::new(inner.clone(), addr, pool_channel_size);
             pools.push(pool);
         }
         inner.pools.store(Some(Arc::new(ClusterConfig { ver: 0, pools })));
@@ -95,7 +95,7 @@ where
     pub fn update_addrs(&self, addrs: Vec<String>) {
         let inner = &self.0;
         let old_cluster_arc = inner.pools.load();
-        let old_pools = old_cluster_arc.as_ref().map(|c| c.pools.clone()).unwrap_or_else(Vec::new);
+        let old_pools = old_cluster_arc.as_ref().map(|c| c.pools.clone()).unwrap_or_default();
 
         let mut new_pools = Vec::with_capacity(addrs.len());
 
@@ -253,13 +253,11 @@ where
 
     #[inline]
     fn error_handle(&self, task: FailoverTask<F::Task>) {
-        if task.should_retry {
-            if task.retry <= self.retry_limit {
-                if let Err(SendError(_task)) = self.retry_tx.send(task) {
-                    _task.done();
-                }
-                return;
+        if task.should_retry && task.retry <= self.retry_limit {
+            if let Err(SendError(_task)) = self.retry_tx.send(task) {
+                _task.done();
             }
+            return;
         }
         task.inner.done();
     }
@@ -274,20 +272,19 @@ where
 
     async fn send_req(&self, mut task: F::Task) {
         let cluster = self.0.pools.load();
-        if let Some(cluster) = cluster.as_ref() {
-            if let Some((index, pool)) =
+        if let Some(cluster) = cluster.as_ref()
+            && let Some((index, pool)) =
                 cluster.select(self.0.round_robin, &self.0.rr_counter, None)
-            {
-                let failover_task = FailoverTask {
-                    last_index: index,
-                    cluster_ver: cluster.ver,
-                    inner: task,
-                    retry: 0,
-                    should_retry: false,
-                };
-                pool.send_req(failover_task).await;
-                return;
-            }
+        {
+            let failover_task = FailoverTask {
+                last_index: index,
+                cluster_ver: cluster.ver,
+                inner: task,
+                retry: 0,
+                should_retry: false,
+            };
+            pool.send_req(failover_task).await;
+            return;
         }
 
         // No pools available
@@ -304,20 +301,19 @@ where
     type Facts = F;
     fn send_req_blocking(&self, mut task: F::Task) {
         let cluster = self.0.pools.load();
-        if let Some(cluster) = cluster.as_ref() {
-            if let Some((index, pool)) =
+        if let Some(cluster) = cluster.as_ref()
+            && let Some((index, pool)) =
                 cluster.select(self.0.round_robin, &self.0.rr_counter, None)
-            {
-                let failover_task = FailoverTask {
-                    last_index: index,
-                    cluster_ver: cluster.ver,
-                    inner: task,
-                    retry: 0,
-                    should_retry: false,
-                };
-                pool.send_req_blocking(failover_task);
-                return;
-            }
+        {
+            let failover_task = FailoverTask {
+                last_index: index,
+                cluster_ver: cluster.ver,
+                inner: task,
+                retry: 0,
+                should_retry: false,
+            };
+            pool.send_req_blocking(failover_task);
+            return;
         }
 
         // No pools available

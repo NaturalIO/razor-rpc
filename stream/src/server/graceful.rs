@@ -4,7 +4,7 @@ use std::{
     any::type_name,
     env,
     fs::OpenOptions,
-    io::{Error, ErrorKind, Write, stderr},
+    io::{Error, Write, stderr},
     os::fd::{AsRawFd, RawFd},
     path::{Path, PathBuf},
     process,
@@ -86,7 +86,7 @@ impl GracefulServer {
         let mut args = std::env::args_os();
         let arg0 = args.next().unwrap();
         let mut cmd = Command::new(arg0);
-        while let Some(arg) = args.next() {
+        for arg in args {
             cmd.arg(arg);
         }
 
@@ -126,7 +126,7 @@ impl GracefulServer {
         match child.try_wait() {
             Ok(Some(_)) => {
                 // graceful restart failed child is exited, parent do not exit
-                return Err(Error::new(ErrorKind::Other, "graceful restart failed, child exited"));
+                return Err(Error::other("graceful restart failed, child exited"));
             }
             Ok(None) => {
                 // graceful restart triggered but child is not ready, parent still exit
@@ -145,7 +145,7 @@ impl GracefulServer {
         L: AsyncListener + AsRawFd,
     {
         // XXX What if order wrong?
-        if self.recover_listen_fds.len() > 0 {
+        if !self.recover_listen_fds.is_empty() {
             let raw_fd = self.recover_listen_fds.remove(0);
             match unsafe { L::try_from_raw_fd(addr, raw_fd) } {
                 Ok(listener) => {
@@ -193,20 +193,20 @@ impl GracefulServer {
             let _ = self.write_child_pid_file();
         }
         let mut sigs = self.close_signals.clone();
-        if let Some(_signal) = restart_signal {
-            if !sigs.contains(&_signal) {
-                sigs.push(_signal);
-            }
+        if let Some(_signal) = restart_signal
+            && !sigs.contains(&_signal)
+        {
+            sigs.push(_signal);
         }
         let mut signals = Signals::new(&sigs).unwrap();
         for signal in signals.forever() {
-            if let Some(_signal) = restart_signal {
-                if _signal == signal {
-                    // graceful restart
-                    match self.restart() {
-                        Ok(_) => break,
-                        Err(_) => continue,
-                    }
+            if let Some(_signal) = restart_signal
+                && _signal == signal
+            {
+                // graceful restart
+                match self.restart() {
+                    Ok(_) => break,
+                    Err(_) => continue,
                 }
             }
             // graceful exit

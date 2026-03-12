@@ -3,19 +3,15 @@ use quote::quote;
 use syn::{AttributeArgs, DeriveInput, Fields, Ident, Meta, NestedMeta, Type, parse_macro_input};
 
 fn check_option_inner_type(ty: &syn::Type) -> bool {
-    if let syn::Type::Path(syn::TypePath { qself: None, path }) = ty {
-        if path.leading_colon.is_none()
-            && path.segments.len() == 1
-            && path.segments[0].ident == "Option"
-        {
-            if let syn::PathArguments::AngleBracketed(args) = &path.segments[0].arguments {
-                if args.args.len() == 1 {
-                    if let syn::GenericArgument::Type(_inner_ty) = &args.args[0] {
-                        return true;
-                    }
-                }
-            }
-        }
+    if let syn::Type::Path(syn::TypePath { qself: None, path }) = ty
+        && path.leading_colon.is_none()
+        && path.segments.len() == 1
+        && path.segments[0].ident == "Option"
+        && let syn::PathArguments::AngleBracketed(args) = &path.segments[0].arguments
+        && args.args.len() == 1
+        && let syn::GenericArgument::Type(_inner_ty) = &args.args[0]
+    {
+        return true;
     }
     false
 }
@@ -68,27 +64,27 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
                 if attr.path.is_ident("field") {
                     if let Ok(Meta::List(meta_list)) = attr.parse_meta() {
                         for nested in meta_list.nested.iter() {
-                            if let NestedMeta::Meta(Meta::Path(p)) = nested {
-                                if let Some(ident) = p.get_ident() {
-                                    let f_name = field.ident.as_ref().unwrap().clone();
-                                    let f_type = field.ty.clone();
-                                    match ident.to_string().as_str() {
-                                        "common" => common_field = Some((f_name, f_type)),
-                                        "req" => req_field = Some(f_name),
-                                        "resp" => resp_field = Some((f_name, f_type)),
-                                        "req_blob" => req_blob_field = Some(f_name),
-                                        "resp_blob" => resp_blob_field = Some((f_name, f_type)),
-                                        "action" => {
-                                            // Handle #[field(action)]
-                                            if field_action.is_some() {
-                                                panic!("Only one #[field(action)] is allowed.");
-                                            }
-                                            field_action = Some((f_name, f_type));
+                            if let NestedMeta::Meta(Meta::Path(p)) = nested
+                                && let Some(ident) = p.get_ident()
+                            {
+                                let f_name = field.ident.as_ref().unwrap().clone();
+                                let f_type = field.ty.clone();
+                                match ident.to_string().as_str() {
+                                    "common" => common_field = Some((f_name, f_type)),
+                                    "req" => req_field = Some(f_name),
+                                    "resp" => resp_field = Some((f_name, f_type)),
+                                    "req_blob" => req_blob_field = Some(f_name),
+                                    "resp_blob" => resp_blob_field = Some((f_name, f_type)),
+                                    "action" => {
+                                        // Handle #[field(action)]
+                                        if field_action.is_some() {
+                                            panic!("Only one #[field(action)] is allowed.");
                                         }
-                                        "res" => res_field = Some((f_name, f_type)),
-                                        "noti" => noti_field = Some((f_name, f_type)),
-                                        _ => {}
+                                        field_action = Some((f_name, f_type));
                                     }
+                                    "res" => res_field = Some((f_name, f_type)),
+                                    "noti" => noti_field = Some((f_name, f_type)),
+                                    _ => {}
                                 }
                             }
                         }
