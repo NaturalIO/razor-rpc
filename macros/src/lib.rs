@@ -205,7 +205,7 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
 /// // let result = client.add(AddArgs { a: 1, b: 2 }).await;
 /// ```
 ///
-/// The macro also supports `async fn` methods when used with `#[async_trait]` (though this is not recommended per the project guidelines).
+/// The macro also supports `async fn` methods when used with `#[async_trait]`.
 #[proc_macro_attribute]
 pub fn endpoint_async(attr: TokenStream, item: TokenStream) -> TokenStream {
     endpoint_async::endpoint_async(attr, item)

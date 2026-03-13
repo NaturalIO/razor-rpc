@@ -1,7 +1,7 @@
 //! # The protocol
 //!
-//!   The packet starts with a fixed-length header and is followed by a variable-length body.
-//! An [RpcAction](crate::proto::RpcAction) represents the type of packet.
+//! The packet starts with a fixed-length header and is followed by a variable-length body.
+//! An [RpcAction] represents the type of packet.
 //! The action type is either numeric or a string.
 //!
 //! The request body contains a mandatory structured message and optional blob data.
