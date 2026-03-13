@@ -19,10 +19,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: test all
-      run: make all-test -- "-F smol"
-
-    - name: test release
-      run: make test-basic -- "-F smol --release"
+      run: make test-all -- "-F smol"
 
     - name: test pressure releaes
-      run: make test-pressure -- "-F smol"
+      run: make pressure -- "-F smol"

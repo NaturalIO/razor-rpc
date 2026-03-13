@@ -18,9 +18,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: test all
-      run: make all-test -- "-F tokio"
-
-    - run: make test-basic -- "-F tokio --release"
+      run: make test-all -- "-F tokio"
 
     - name: test presure release
-      run: make test-pressure -- "-F tokio"
+      run: make pressure -- "-F tokio"

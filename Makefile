@@ -40,7 +40,7 @@ test: init
 	@echo "Done"
 
 pressure: init
-	cargo test -p razor-rpc-test ${ARGS} --release bench -- --nocapture --test-threads=1
+	cargo test -p razor-rpc-test ${ARGS} --release -- --nocapture --test-threads=1
 
 .PHONY: build
 build: init
