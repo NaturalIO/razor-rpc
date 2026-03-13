@@ -1,7 +1,7 @@
 use razor_rpc::server::task::{APIServerReq, APIServerResp};
 use razor_rpc::{Codec, error::RpcError};
 use razor_rpc_codec::MsgpCodec;
-use razor_rpc_macros::{method, service, service_mux_struct};
+use razor_rpc_macros::{service, service_mux_struct};
 use razor_stream::server::task::RespNoti;
 use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -24,38 +24,49 @@ pub struct MyResp {
     pub result: u32,
 }
 
-// Service with multiple error types
+// Service trait with multiple error types
+#[async_trait::async_trait]
+pub trait MultiErrorService {
+    async fn success_method(&self, arg: MyArg) -> Result<MyResp, RpcError<String>>;
+    async fn string_error(&self, arg: MyArg) -> Result<MyResp, RpcError<String>>;
+    async fn i32_error(&self, arg: MyArg) -> Result<MyResp, RpcError<i32>>;
+    async fn errno_error(&self, arg: MyArg) -> Result<MyResp, RpcError<nix::errno::Errno>>;
+}
+
 pub struct MultiErrorServiceImpl;
 
+#[async_trait::async_trait]
 #[service]
-impl MultiErrorServiceImpl {
-    #[method]
+impl MultiErrorService for MultiErrorServiceImpl {
     async fn success_method(&self, arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Ok(MyResp { result: arg.value + 1 })
     }
 
-    #[method]
     async fn string_error(&self, _arg: MyArg) -> Result<MyResp, RpcError<String>> {
         Err("string error".to_string().into())
     }
 
-    #[method]
     async fn i32_error(&self, _arg: MyArg) -> Result<MyResp, RpcError<i32>> {
         Err(42.into())
     }
 
-    #[method]
     async fn errno_error(&self, _arg: MyArg) -> Result<MyResp, RpcError<nix::errno::Errno>> {
         Err(nix::errno::Errno::EPERM.into())
     }
 }
 
-// Service with `impl Future` return type (non-async fn)
+// Service trait with `impl Future` return type (non-async fn)
+pub trait ImplFutureServiceTrait {
+    fn add(
+        &self, arg: MyArg,
+    ) -> impl std::future::Future<Output = Result<MyResp, RpcError<String>>> + Send;
+}
+
 pub struct ImplFutureService;
+
 #[service]
-impl ImplFutureService {
-    #[method]
-    pub fn add(
+impl ImplFutureServiceTrait for ImplFutureService {
+    fn add(
         &self, arg: MyArg,
     ) -> impl std::future::Future<Output = Result<MyResp, RpcError<String>>> + Send {
         async move { Ok(MyResp { result: arg.value + 1 }) }

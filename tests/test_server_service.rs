@@ -14,7 +14,7 @@ use common::*;
 async fn test_multi_error_service() {
     assert_eq!(
         <MultiErrorServiceImpl as ServiceStatic<MsgpCodec>>::SERVICE_NAME,
-        "MultiErrorServiceImpl"
+        "MultiErrorService"
     );
     let service_impl = MultiErrorServiceImpl;
     let codec = MsgpCodec::default();
@@ -94,7 +94,10 @@ async fn test_multi_error_service() {
 
 #[tokio::test]
 async fn test_impl_future_service() {
-    assert_eq!(<ImplFutureService as ServiceStatic<MsgpCodec>>::SERVICE_NAME, "ImplFutureService");
+    assert_eq!(
+        <ImplFutureService as ServiceStatic<MsgpCodec>>::SERVICE_NAME,
+        "ImplFutureServiceTrait"
+    );
     let service_impl = ImplFutureService;
     let codec = MsgpCodec::default();
     let (tx, rx) = crossfire::mpsc::unbounded_async();

@@ -6,56 +6,20 @@ mod endpoint_client;
 mod service;
 mod service_mux_struct;
 
-/// The `#[service]` macro is applied to an `impl` block to automatically generate the `ServiceTrait` implementation for the type.
+/// The `#[service]` macro is applied to an `impl Trait for Struct` block to automatically
+/// generate the `ServiceStatic` implementation for the type.
 ///
-/// - When applied to an inherent `impl` block (without `impl Trait`), methods intended as service methods should be marked with `#[method]`.
 /// - When applied to a trait `impl` block, all methods defined in the trait will be registered as service methods.
 /// - All service methods must return `Result<T, RpcError<E>>`, where `E` is a user-defined error type that implements `RpcErrCodec`.
 ///
 /// The service method recognizes:
-/// - `fn` (which is considered non-blocking)
 /// - `async fn`
 /// - `impl Future`
 /// - trait methods wrapped by `async_trait`
 ///
 /// # Usage
 ///
-/// Without `impl Trait` (inherent implementation):
-///
-/// ```rust
-/// use razor_rpc::server::{service, method};
-/// use razor_rpc::error::RpcError;
-/// use serde::{Deserialize, Serialize};
-/// use razor_rpc::server::ServiceStatic;
-/// use razor_rpc_codec::MsgpCodec;
-///
-/// #[derive(Debug, Deserialize, Serialize)]
-/// pub struct AddArgs {
-///     a: i32,
-///     b: i32,
-/// }
-///
-/// #[derive(Debug, Deserialize, Serialize)]
-/// pub struct AddResp {
-///     result: i32,
-/// }
-///
-/// pub struct CalculatorService;
-///
-/// #[service]
-/// impl CalculatorService {
-///     #[method]
-///     async fn add(&self, args: AddArgs) -> Result<AddResp, RpcError<()>> {
-///         Ok(AddResp { result: args.a + args.b })
-///     }
-/// }
-///
-/// // This will generate a ServiceStatic implementation that can be used as:
-/// // let service = CalculatorService;
-/// // service.serve(request).await;
-/// ```
-///
-/// With trait implementation using `impl Future`:
+/// Define a service trait and implement it for your service struct:
 ///
 /// ```rust
 /// use razor_rpc::server::service;
@@ -93,15 +57,6 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
     service::service(_attr, item)
 }
 
-/// A marker attribute for methods in an inherent `impl` block that should be exposed as RPC methods.
-/// This is not needed when using a trait-based implementation.
-///
-/// Refer to document of attr macro `#[service]`
-#[proc_macro_attribute]
-pub fn method(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
-}
-
 /// The `#[service_mux_struct]` macro is applied to a **struct** to implement `ServiceTrait` on it.
 /// It acts as a dispatcher, routing `serve()` calls to the correct service based on the `req.service` field.
 ///
@@ -111,7 +66,7 @@ pub fn method(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # Usage
 ///
 /// ```rust
-/// use razor_rpc::server::{service, service_mux_struct, method};
+/// use razor_rpc::server::{service, service_mux_struct};
 /// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 /// use std::sync::Arc;
@@ -127,20 +82,30 @@ pub fn method(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ///     result: i32,
 /// }
 ///
+/// // Define service trait
+/// pub trait MathService {
+///     async fn add(&self, args: MathArgs) -> Result<MathResp, RpcError<()>>;
+///     async fn multiply(&self, args: MathArgs) -> Result<MathResp, RpcError<()>>;
+/// }
+///
 /// // Define services
 /// pub struct AddService;
 /// #[service]
-/// impl AddService {
-///     #[method]
+/// impl MathService for AddService {
 ///     async fn add(&self, args: MathArgs) -> Result<MathResp, RpcError<()>> {
 ///         Ok(MathResp { result: args.value + 1 })
+///     }
+///     async fn multiply(&self, _args: MathArgs) -> Result<MathResp, RpcError<()>> {
+///         unimplemented!()
 ///     }
 /// }
 ///
 /// pub struct MultiplyService;
 /// #[service]
-/// impl MultiplyService {
-///     #[method]
+/// impl MathService for MultiplyService {
+///     async fn add(&self, _args: MathArgs) -> Result<MathResp, RpcError<()>> {
+///         unimplemented!()
+///     }
 ///     async fn multiply(&self, args: MathArgs) -> Result<MathResp, RpcError<()>> {
 ///         Ok(MathResp { result: args.value * 2 })
 ///     }

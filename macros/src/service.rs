@@ -28,17 +28,16 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     match input {
         Item::Impl(item_impl) => {
-            let self_ty = &item_impl.self_ty;
+            // Must be used on impl Trait for Struct
             let service_name = if let Some((_, path, _)) = &item_impl.trait_ {
                 path.segments.last().unwrap().ident.to_string()
             } else {
-                let ty_path = if let Type::Path(type_path) = self_ty.as_ref() {
-                    type_path
-                } else {
-                    panic!("Expected a path for self_ty");
-                };
-                ty_path.path.segments.last().unwrap().ident.to_string()
+                panic!(
+                    "The `#[service]` macro must be applied to `impl Trait for Struct` blocks. \
+                     Inherent impl blocks (without a trait) are not supported."
+                );
             };
+            let self_ty = &item_impl.self_ty;
             let service_name_pascal = service_name;
 
             let methods_data: Vec<_> = item_impl
@@ -46,9 +45,8 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 .iter()
                 .filter_map(|item| {
                     if let ImplItem::Method(method) = item {
-                        if item_impl.trait_.is_some()
-                            || method.attrs.iter().any(|attr| attr.path.is_ident("method"))
-                        {
+                        // In trait impl, all methods are service methods
+                        // (inherent impl with #[method] is no longer supported)
                             let method_name = method.sig.ident.clone();
                             let arg_ty: Type = method
                                 .sig
@@ -97,9 +95,6 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
 
                             Some((method_name, arg_ty))
-                        } else {
-                            None
-                        }
                     } else {
                         None
                     }
