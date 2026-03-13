@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - razor-rpc: Change AsyncEndpoint & BlockEndpoint from struct to helper trait.
 
+- razor-stream: Simplify FailoverPool to break cycle ref. Add Clone for FailoverPool.
+
 ### Removed
 
 - razor-rpc-macros: Drop the support of #[service] on impl block
