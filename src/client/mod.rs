@@ -15,6 +15,14 @@ use std::sync::Arc;
 
 pub type APIClientDefault<IO, C> = razor_stream::client::ClientDefault<APIClientReq, IO, C>;
 
+/// Optional helper trait to Provide two convenient function to crete ClientPool / FailoverPool
+///
+/// We automatically impl this trait for traits met the requirement `ClientFacts<Task = APIClientReq>`.
+/// To use it, you just have to:
+///
+/// ```
+/// use razor_rpc::client::APIClientFacts;
+/// ```
 pub trait APIClientFacts: ClientFacts<Task = APIClientReq> {
     fn create_pool_async<T: ClientTransport>(self: Arc<Self>, addr: &str) -> ClientPool<Self, T> {
         ClientPool::new(self.clone(), addr, 0)
