@@ -29,23 +29,48 @@ pub trait APIClientFacts: ClientFacts<Task = APIClientReq> {
 
 impl<F: ClientFacts<Task = APIClientReq>> APIClientFacts for F {}
 
-pub struct AsyncEndpoint<C>
+pub trait AsyncEndpoint<C>: AsRef<C> + Sync
 where
     C: ClientCaller<Facts: ClientFacts<Task = APIClientReq>>,
 {
-    caller: C,
-    codec: <C::Facts as ClientFacts>::Codec,
-}
+    fn codec(&self) -> &<C::Facts as ClientFacts>::Codec;
 
-impl<C> AsyncEndpoint<C>
-where
-    C: ClientCaller<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    pub fn new(caller: C) -> Self {
-        Self { caller, codec: Default::default() }
+    fn caller(&self) -> &C {
+        self.as_ref()
     }
 
-    pub async fn call<Req, Resp, E>(
+    fn call<Req, Resp, E>(
+        &self, service_method: &'static str, req: &Req,
+    ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
+    where
+        Req: serde::Serialize + fmt::Debug + Send + Sync,
+        Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
+        E: RpcErrCodec,
+    {
+        async move {
+            let (tx, rx) = oneshot::<APIClientReq>();
+            let codec = self.codec();
+            <C as ClientCaller>::send_req(self.caller(), make_req(codec, service_method, req, tx))
+                .await;
+            process_res(codec, rx.recv_async().await)
+        }
+    }
+}
+
+// AsyncEndpoint trait is provided for user-defined clients
+// Users implement this trait on their client structs to get the call() method
+
+pub trait BlockingEndpoint<C>: AsRef<C>
+where
+    C: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
+{
+    fn codec(&self) -> &<C::Facts as ClientFacts>::Codec;
+
+    fn caller(&self) -> &C {
+        self.as_ref()
+    }
+
+    fn call<Req, Resp, E>(
         &self, service_method: &'static str, req: &Req,
     ) -> Result<Resp, RpcError<E>>
     where
@@ -54,83 +79,14 @@ where
         E: RpcErrCodec,
     {
         let (tx, rx) = oneshot::<APIClientReq>();
-        // TODO should optimize one shot channel
-        <C as ClientCaller>::send_req(&self.caller, make_req(&self.codec, service_method, req, tx))
-            .await;
-        process_res(&self.codec, rx.recv_async().await)
+        let codec = self.codec();
+        self.caller().send_req_blocking(make_req(codec, service_method, req, tx));
+        process_res(codec, rx.recv())
     }
 }
 
-impl<C> Clone for AsyncEndpoint<C>
-where
-    C: Clone + ClientCaller<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    fn clone(&self) -> Self {
-        Self::new(self.caller.clone())
-    }
-}
-
-impl<C> std::ops::Deref for AsyncEndpoint<C>
-where
-    C: ClientCaller<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        &self.caller
-    }
-}
-
-pub struct BlockingEndpoint<C>
-where
-    C: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    caller: C,
-    codec: <C::Facts as ClientFacts>::Codec,
-}
-
-impl<C> BlockingEndpoint<C>
-where
-    C: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    fn new(caller: C) -> Self {
-        Self { caller, codec: Default::default() }
-    }
-
-    pub fn call<Req, Resp, E>(
-        &self, service_method: &'static str, req: &Req,
-    ) -> Result<Resp, RpcError<E>>
-    where
-        Req: serde::Serialize + fmt::Debug,
-        Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
-        E: RpcErrCodec,
-    {
-        let (tx, rx) = oneshot::<APIClientReq>();
-        // TODO should optimize one shot channel
-        self.caller.send_req_blocking(make_req(&self.codec, service_method, req, tx));
-        process_res(&self.codec, rx.recv())
-    }
-}
-
-impl<C> Clone for BlockingEndpoint<C>
-where
-    C: Clone + ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    fn clone(&self) -> Self {
-        Self::new(self.caller.clone())
-    }
-}
-
-impl<C> std::ops::Deref for BlockingEndpoint<C>
-where
-    C: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    type Target = C;
-
-    fn deref(&self) -> &Self::Target {
-        &self.caller
-    }
-}
+// BlockingEndpoint trait is provided for user-defined blocking clients
+// Users implement this trait on their client structs to get the call() method
 
 #[inline]
 fn make_req<C, Req>(

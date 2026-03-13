@@ -110,7 +110,6 @@ fn check_result_type(ty: &syn::Type) -> bool {
 
 fn generate_client_struct(client_name: &Ident) -> proc_macro2::TokenStream {
     quote! {
-        #[derive(Clone)]
         pub struct #client_name<C>
         where
             C: razor_rpc::client::ClientCaller,
@@ -119,17 +118,61 @@ fn generate_client_struct(client_name: &Ident) -> proc_macro2::TokenStream {
             C: 'static,
             C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
         {
-            pub endpoint: razor_rpc::client::AsyncEndpoint<C>,
+            caller: C,
+            codec: <C::Facts as razor_rpc::client::ClientFacts>::Codec,
         }
     }
 }
 
 fn generate_client_impl(client_name: &Ident) -> proc_macro2::TokenStream {
-    // Generate new constructor
     let new_method = quote! {
         pub fn new(caller: C) -> Self {
             Self {
-                endpoint: razor_rpc::client::AsyncEndpoint::new(caller),
+                caller,
+                codec: Default::default(),
+            }
+        }
+    };
+
+    let as_ref_impl = quote! {
+        impl<C> std::convert::AsRef<C> for #client_name<C>
+        where
+            C: razor_rpc::client::ClientCaller,
+            C: Clone + Sync + 'static,
+            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
+        {
+            fn as_ref(&self) -> &C {
+                &self.caller
+            }
+        }
+    };
+
+    let clone_impl = quote! {
+        impl<C> Clone for #client_name<C>
+        where
+            C: razor_rpc::client::ClientCaller + Clone,
+            C: Clone + Sync + 'static,
+            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
+            <C::Facts as razor_rpc::client::ClientFacts>::Codec: Clone,
+        {
+            fn clone(&self) -> Self {
+                Self {
+                    caller: self.caller.clone(),
+                    codec: self.codec.clone(),
+                }
+            }
+        }
+    };
+
+    let async_endpoint_impl = quote! {
+        impl<C> razor_rpc::client::AsyncEndpoint<C> for #client_name<C>
+        where
+            C: razor_rpc::client::ClientCaller,
+            C: Clone + Sync + 'static,
+            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
+        {
+            fn codec(&self) -> &<C::Facts as razor_rpc::client::ClientFacts>::Codec {
+                &self.codec
             }
         }
     };
@@ -143,6 +186,12 @@ fn generate_client_impl(client_name: &Ident) -> proc_macro2::TokenStream {
         {
             #new_method
         }
+
+        #as_ref_impl
+
+        #clone_impl
+
+        #async_endpoint_impl
     }
 }
 
@@ -218,14 +267,14 @@ fn generate_trait_impl(
                         quote! {
                             fn #method_name(&self, #arg_name: #arg_type) #return_type {
                                 async move {
-                                    self.endpoint.call(#service_method, &#arg_name).await
+                                    <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &#arg_name).await
                                 }
                             }
                         }
                     } else {
                         quote! {
                             async fn #method_name(&self, #arg_name: #arg_type) #return_type {
-                                self.endpoint.call(#service_method, &#arg_name).await
+                                <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &#arg_name).await
                             }
                         }
                     }
@@ -233,7 +282,7 @@ fn generate_trait_impl(
                     // For non-async methods, we still need to return a future
                     quote! {
                         async fn #method_name(&self, #arg_name: #arg_type) #return_type {
-                            self.endpoint.call(#service_method, &#arg_name).await
+                            <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &#arg_name).await
                         }
                     }
                 }
@@ -244,14 +293,14 @@ fn generate_trait_impl(
                         quote! {
                             fn #method_name(&self) #return_type {
                                 async move {
-                                    self.endpoint.call(#service_method, &()).await
+                                    <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &()).await
                                 }
                             }
                         }
                     } else {
                         quote! {
                             async fn #method_name(&self) #return_type {
-                                self.endpoint.call(#service_method, &()).await
+                                <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &()).await
                             }
                         }
                     }
@@ -259,7 +308,7 @@ fn generate_trait_impl(
                     // For non-async methods, we still need to return a future
                     quote! {
                         async fn #method_name(&self) #return_type {
-                            self.endpoint.call(#service_method, &()).await
+                            <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &()).await
                         }
                     }
                 }
