@@ -1,22 +1,6 @@
 ## The API interface
 
-### 1. Service
-
-A Service in `razor-rpc` follows these principles:
-- Called with immutable `&self` (server-side requires `Sync`)
-- Client and server share the same trait definition for compile-time checks
-- Service methods return `Result<T, RpcError<E>>` where `E: RpcErrCodec`
-- Methods should be `async fn` or return `impl Future`
-- Compatible with GRPC naming conventions (`service` in PascalCase, `method` in snake_case)
-
-We supports rust 1.75 `AFIT` (Async fn in Traits) `RPITIT` (Return Position Impl Trait in Traits), and legacy `#[async_trait]`.
-
-The best practice is to define service interface in a separate "proto" crate shared between server and client.
-
-While you still have an optional not to shared code (when you have a public client and intend to keep some private methods), then you can optionally use `#[service]` on `impl` block and `#[method]` to mark service methods.
-(Refer to example in [`server::service`](crate::server::service)).
- 
-### 2. Client-Side
+### 1. Client-Side
 
 See [`client`](crate::client) module for more details.
 
@@ -31,31 +15,73 @@ The following structs impl both [ClientCaller](crate::client::ClientCaller) (asy
 
 **Endpoint**
 
-Endpoints are wrapper structs around `ClientCaller`
+Endpoints are helper trait for those `AsRef<ClientCaller>`
 
 - **[`AsyncEndpoint`](crate::client::AsyncEndpoint)**: This trait defines `async fn call` - a wrapper around `ClientCaller`
 - **[`BlockingEndpoint`](crate::client::BlockingEndpoint)**: This trait defines synchronous `fn call`
 
 **Client**
 
-For async context, we provide macro: **[`#[endpoint_async]`](crate::client::endpoint_async)** - Applied to a user defined trait to generate a client struct by specified name. 
+Because client should defined by user to add their service method, we provide macro
+**[`endpoint_client!`](crate::client::endpoint_client)** to generates a client struct with generic, which have a new() method to wrap a ClientCaller:
 
-For example: 
-```ignore
-#[endpoint_async(CalculatorClient)]
-pub trait CalculatorService {
+For example:
+
+```text
+endpoint_client!(YourClient);
+```
+
+Generated code:
+```text
+pub struct #client_name<C>
+where
+    C: razor_rpc::client::ClientCaller,
+    C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
+{
+    inner: C,
+}
+
+impl<C> #client_name<C>
+where
+    C: razor_rpc::client::ClientCaller,
+    C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>
+{
+    pub fn new(caller: C) -> Self {
+        ...
+    }
+}
+```
+
+
+blocking-context is not implemented yet.
+
+### 2. Service
+
+A Service in `razor-rpc` follows these principles:
+- Called with immutable `&self` (server-side requires `Sync`)
+- Client and server share the same trait definition for compile-time checks
+- Service methods return `Result<T, RpcError<E>>` where `E: RpcErrCodec`
+- Methods should be `async fn` or return `impl Future`
+- Compatible with GRPC naming conventions (`service` in PascalCase, `method` in snake_case)
+
+We supports rust 1.75 `AFIT` (Async fn in Traits) `RPITIT` (Return Position Impl Trait in Traits), and legacy `#[async_trait]`.
+
+The best practice is to define service interface in a separate "proto" crate shared between server and client.
+You will need to apply [`#[endpoint_async]`](crate::client::endpoint_async) macro to impl the trait with your client.
+
+**NOTE**: You can apply multiple service traits to a client.
+
+```text
+#[endpoint_async(YourClient)]
+pub trait YourService {
     ...
 }
 ```
 
-The generated client implements the trait. and a new function to wrap a generic ClientCaller.
-
-blocking-context is not implemented yet.
-
 
 ### 3. Server-Side
 
-When apply [`#[service]`](crate::server::service) on a user defined trait, it will parse all async fn method and impl [ServiceStatic](crate::server::ServiceStatic) trait on it. 
+When apply [`#[service]`](crate::server::service) on a user defined trait, it will parse all async fn method and impl [ServiceStatic](crate::server::ServiceStatic) trait on it.
 
 Its `serve(req)` method will:
   - decode the request argument type from [APIServerReq](crate::server::task::APIServerReq)
@@ -98,7 +124,7 @@ Steps:
 The code:
 
 ```rust
-use razor_rpc::client::{endpoint_async, APIClientReq, ClientConfig};
+use razor_rpc::client::{endpoint_client, endpoint_async, APIClientReq, ClientConfig};
 use razor_rpc::server::{service, ServerConfig};
 use razor_rpc::error::RpcError;
 use razor_rpc_tcp::{TcpClient, TcpServer};
@@ -113,7 +139,9 @@ type OurCodec = razor_rpc_codec::MsgpCodec;
 type ServerProto = TcpServer<OurRt>;
 type ClientProto = TcpClient<OurRt>;
 
-// 3. Define a service trait, and generate the client struct
+// 3. Define the client struct and service trait
+endpoint_client!(CalculatorClient);
+
 #[endpoint_async(CalculatorClient)]
 pub trait CalculatorService {
     // Method with unit error type using impl Future

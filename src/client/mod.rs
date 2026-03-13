@@ -1,7 +1,7 @@
 pub mod task;
 use crossfire::oneshot::oneshot;
 use crossfire::*;
-pub use razor_rpc_macros::endpoint_async;
+pub use razor_rpc_macros::{endpoint_async, endpoint_client};
 pub use razor_stream::client::ClientCaller;
 pub use task::*;
 
@@ -144,4 +144,54 @@ where
         }
         Err(_) => Err(RpcIntErr::Internal.into()),
     }
+}
+
+/// A macro to implement AsyncEndpoint trait and Clone for a client struct.
+///
+/// The client struct must have `caller: C` and `codec: <C::Facts as ClientFacts>::Codec` fields.
+///
+/// # Example
+///
+/// ```ignore
+/// pub struct MyClient<C> {
+///     caller: C,
+///     codec: <C::Facts as ClientFacts>::Codec,
+/// }
+///
+/// impl_client!(MyClient);
+/// ```
+#[macro_export]
+macro_rules! impl_client {
+    ($client:ident) => {
+        impl<C> Clone for $client<C>
+        where
+            C: $crate::client::ClientCaller + Clone + Sync,
+            C::Facts: $crate::client::ClientFacts<Task = $crate::client::task::APIClientReq>,
+            <C::Facts as $crate::client::ClientFacts>::Codec: Clone,
+        {
+            fn clone(&self) -> Self {
+                Self { caller: self.caller.clone(), codec: self.codec.clone() }
+            }
+        }
+
+        impl<C> std::convert::AsRef<C> for $client<C>
+        where
+            C: $crate::client::ClientCaller + Sync,
+            C::Facts: $crate::client::ClientFacts<Task = $crate::client::task::APIClientReq>,
+        {
+            fn as_ref(&self) -> &C {
+                &self.caller
+            }
+        }
+
+        impl<C> $crate::client::AsyncEndpoint<C> for $client<C>
+        where
+            C: $crate::client::ClientCaller + Sync,
+            C::Facts: $crate::client::ClientFacts<Task = $crate::client::task::APIClientReq>,
+        {
+            fn codec(&self) -> &<C::Facts as $crate::client::ClientFacts>::Codec {
+                &self.codec
+            }
+        }
+    };
 }

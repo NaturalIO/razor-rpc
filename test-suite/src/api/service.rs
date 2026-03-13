@@ -1,6 +1,9 @@
 use nix::errno::Errno;
-use razor_rpc::client::endpoint_async;
+use razor_rpc::client::{endpoint_async, endpoint_client};
 use razor_rpc::error::RpcError;
+
+endpoint_client!(CalClient);
+endpoint_client!(EchoClient);
 
 #[endpoint_async(CalClient)]
 #[async_trait::async_trait]

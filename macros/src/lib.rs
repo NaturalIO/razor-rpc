@@ -2,6 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 
 mod endpoint_async;
+mod endpoint_client;
 mod service;
 mod service_mux_struct;
 
@@ -163,10 +164,31 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
     service_mux_struct::service_mux_struct(_attr, item)
 }
 
-/// The `#[endpoint_async]` macro applies to a trait to generate a client for remote api calls
-/// for async context.
+/// The `endpoint_client!` macro generates a client struct that can be used to make remote API calls.
 ///
-/// NOTE: the generated struct and interface will appear in your `cargo doc`.
+/// This macro should be used first to define the client struct, then use `#[endpoint_async]`
+/// to implement service traits for the client.
+///
+/// # Usage
+///
+/// ```rust
+/// use razor_rpc::client::endpoint_client;
+///
+/// endpoint_client!(MyClient);
+///
+/// // This generates MyClient<C> struct with:
+/// // - new(caller: C) constructor
+/// // - Clone implementation
+/// // - AsyncEndpoint<C> implementation
+/// ```
+#[proc_macro]
+pub fn endpoint_client(input: TokenStream) -> TokenStream {
+    endpoint_client::endpoint_client(input)
+}
+
+/// The `#[endpoint_async]` macro applies to a trait to implement it for a client struct.
+///
+/// The client struct must be defined beforehand using `#[endpoint_client(ClientName)]`.
 ///
 /// Rules:
 ///     - trait can be wrapped async_trait, optionally.
@@ -176,10 +198,8 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
 ///
 /// # Usage
 ///
-/// Define a service trait with the `#[endpoint_async]` attribute:
-///
 /// ```rust
-/// use razor_rpc::client::endpoint_async;
+/// use razor_rpc::client::{endpoint_client, endpoint_async};
 /// use razor_rpc::error::RpcError;
 /// use serde::{Deserialize, Serialize};
 /// use std::future::Future;
@@ -195,12 +215,16 @@ pub fn service_mux_struct(_attr: TokenStream, item: TokenStream) -> TokenStream 
 ///     pub result: i32,
 /// }
 ///
+/// // Step 1: Define the client struct
+/// endpoint_client!(CalculatorClient);
+///
+/// // Step 2: Define a service trait and implement it for the client
 /// #[endpoint_async(CalculatorClient)]
 /// pub trait CalculatorService {
 ///     fn add(&self, args: AddArgs) -> impl Future<Output = Result<AddResp, RpcError<()>>> + Send;
 /// }
 ///
-/// // This generates a CalculatorClient struct that can be used with a client caller:
+/// // Usage:
 /// // let client = CalculatorClient::new(caller);
 /// // let result = client.add(AddArgs { a: 1, b: 2 }).await;
 /// ```

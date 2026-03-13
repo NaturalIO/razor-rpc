@@ -5,7 +5,7 @@ use razor_rpc::{
     error::{RpcError, RpcIntErr},
 };
 use razor_rpc_codec::MsgpCodec;
-use razor_rpc_macros::endpoint_async;
+use razor_rpc_macros::{endpoint_async, endpoint_client};
 use razor_stream::client::ClientDefault;
 use razor_stream::client::task::{
     ClientTaskAction, ClientTaskDecode, ClientTaskDone, ClientTaskEncode,
@@ -71,6 +71,14 @@ impl ClientCaller for MockCaller {
                 let resp = ConcatResp { result: "HelloWorld".to_string() };
                 codec.encode(&resp).unwrap()
             }
+            "MultiServiceA.method_a" => {
+                let resp = AddResp { c: 100 };
+                codec.encode(&resp).unwrap()
+            }
+            "MultiServiceB.method_b" => {
+                let resp = ComputeResp { result: 200 };
+                codec.encode(&resp).unwrap()
+            }
             _ => unreachable!(),
         };
 
@@ -117,6 +125,11 @@ pub struct ConcatArgs {
 pub struct ConcatResp {
     result: String,
 }
+
+// Define client structs using endpoint_client macro
+endpoint_client!(MyTestClient);
+endpoint_client!(MyFutureClient);
+endpoint_client!(NoAsyncTraitClient);
 
 // Service Trait with async_trait
 #[endpoint_async(MyTestClient)]
@@ -250,5 +263,46 @@ async fn test_endpoint_async_macro_with_error() {
     match result {
         Err(RpcError::Rpc(RpcIntErr::Method)) => {}
         _ => panic!("Expected RpcIntErr::Method error"),
+    }
+}
+
+// Define a client that will implement multiple service traits
+endpoint_client!(MultiServiceClient);
+
+// First service trait for the same client
+#[endpoint_async(MultiServiceClient)]
+pub trait MultiServiceA: Send + Sync + 'static {
+    fn method_a(&self, args: AddArgs)
+    -> impl Future<Output = Result<AddResp, RpcError<()>>> + Send;
+}
+
+// Second service trait for the same client
+#[endpoint_async(MultiServiceClient)]
+pub trait MultiServiceB: Send + Sync + 'static {
+    fn method_b(
+        &self, args: ComputeArgs,
+    ) -> impl Future<Output = Result<ComputeResp, RpcError<()>>> + Send;
+}
+
+// Test that one client can implement multiple service traits
+#[tokio::test]
+async fn test_multi_service_client() {
+    let caller = MockCaller::new();
+    let client = MultiServiceClient::new(caller.clone());
+
+    // Call method from MultiServiceA
+    let resp_a = client.method_a(AddArgs { a: 1, b: 2 }).await.unwrap();
+    assert_eq!(resp_a, AddResp { c: 100 });
+
+    // Call method from MultiServiceB
+    let resp_b = client.method_b(ComputeArgs { x: 3, y: 4 }).await.unwrap();
+    assert_eq!(resp_b, ComputeResp { result: 200 });
+
+    // Verify both requests were made
+    {
+        let requests = caller.stored_requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].action, "MultiServiceA.method_a");
+        assert_eq!(requests[1].action, "MultiServiceB.method_b");
     }
 }

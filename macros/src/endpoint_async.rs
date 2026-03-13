@@ -6,7 +6,8 @@ use syn::{
     parse_macro_input,
 };
 
-/// Parse macro arguments to get the struct name to generate
+/// Parse macro arguments to get the client name
+/// Usage: #[endpoint_async(ClientName)]
 struct EndpointAsyncArgs {
     client_name: Ident,
 }
@@ -30,21 +31,11 @@ pub fn endpoint_async(args: TokenStream, input: TokenStream) -> TokenStream {
         .iter()
         .any(|attr| attr.path.segments.iter().any(|segment| segment.ident == "async_trait"));
 
-    // Generate client struct
-    let client_struct = generate_client_struct(&client_name);
-
-    // Generate client implementation
-    let client_impl = generate_client_impl(&client_name);
-
-    // Generate trait implementation
+    // Generate trait implementation for the client
     let trait_impl = generate_trait_impl(&client_name, &input_trait, has_async_trait);
 
     let expanded = quote! {
         #input_trait
-
-        #client_struct
-
-        #client_impl
 
         #trait_impl
     };
@@ -106,93 +97,6 @@ fn check_result_type(ty: &syn::Type) -> bool {
         }
     }
     false
-}
-
-fn generate_client_struct(client_name: &Ident) -> proc_macro2::TokenStream {
-    quote! {
-        pub struct #client_name<C>
-        where
-            C: razor_rpc::client::ClientCaller,
-            C: Clone,
-            C: Sync,
-            C: 'static,
-            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
-        {
-            caller: C,
-            codec: <C::Facts as razor_rpc::client::ClientFacts>::Codec,
-        }
-    }
-}
-
-fn generate_client_impl(client_name: &Ident) -> proc_macro2::TokenStream {
-    let new_method = quote! {
-        pub fn new(caller: C) -> Self {
-            Self {
-                caller,
-                codec: Default::default(),
-            }
-        }
-    };
-
-    let as_ref_impl = quote! {
-        impl<C> std::convert::AsRef<C> for #client_name<C>
-        where
-            C: razor_rpc::client::ClientCaller,
-            C: Clone + Sync + 'static,
-            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
-        {
-            fn as_ref(&self) -> &C {
-                &self.caller
-            }
-        }
-    };
-
-    let clone_impl = quote! {
-        impl<C> Clone for #client_name<C>
-        where
-            C: razor_rpc::client::ClientCaller + Clone,
-            C: Clone + Sync + 'static,
-            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
-            <C::Facts as razor_rpc::client::ClientFacts>::Codec: Clone,
-        {
-            fn clone(&self) -> Self {
-                Self {
-                    caller: self.caller.clone(),
-                    codec: self.codec.clone(),
-                }
-            }
-        }
-    };
-
-    let async_endpoint_impl = quote! {
-        impl<C> razor_rpc::client::AsyncEndpoint<C> for #client_name<C>
-        where
-            C: razor_rpc::client::ClientCaller,
-            C: Clone + Sync + 'static,
-            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
-        {
-            fn codec(&self) -> &<C::Facts as razor_rpc::client::ClientFacts>::Codec {
-                &self.codec
-            }
-        }
-    };
-
-    quote! {
-        impl<C> #client_name<C>
-        where
-            C: razor_rpc::client::ClientCaller,
-            C: Clone + Sync + 'static,
-            C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
-        {
-            #new_method
-        }
-
-        #as_ref_impl
-
-        #clone_impl
-
-        #async_endpoint_impl
-    }
 }
 
 fn generate_trait_impl(

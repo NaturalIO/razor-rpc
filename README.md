@@ -53,9 +53,9 @@ wrapper
 ### Example
 
 ```rust
-use razor_rpc::client::{endpoint_async, APIClientReq, ClientConfig};
+use razor_rpc::client::{endpoint_client, endpoint_async, APIClientReq, ClientConfig};
 use razor_rpc::server::{service, ServerConfig};
-use razor_rpc::RpcError;
+use razor_rpc::error::RpcError;
 use razor_rpc_tcp::{TcpClient, TcpServer};
 use nix::errno::Errno;
 use std::future::Future;
@@ -68,7 +68,9 @@ type OurCodec = razor_rpc_codec::MsgpCodec;
 type ServerProto = TcpServer<OurRt>;
 type ClientProto = TcpClient<OurRt>;
 
-// 3. Define a service trait, and generate the client struct
+// 3. Define the client struct and service trait
+endpoint_client!(CalculatorClient);
+
 #[endpoint_async(CalculatorClient)]
 pub trait CalculatorService {
     // Method with unit error type using impl Future
