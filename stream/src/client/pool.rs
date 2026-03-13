@@ -166,10 +166,10 @@ impl<F: ClientFacts, P: ClientTransport> ClientPoolInner<F, P> {
         self.worker_count.load(SeqCst)
     }
 
-    #[inline(always)]
-    fn get_healthy_workers(&self) -> usize {
-        self.connected_worker_count.load(SeqCst)
-    }
+    //    #[inline(always)]
+    //    fn get_healthy_workers(&self) -> usize {
+    //        self.connected_worker_count.load(SeqCst)
+    //    }
 
     #[inline(always)]
     fn set_err(&self) {
