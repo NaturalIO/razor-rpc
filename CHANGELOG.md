@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.6.0] - 2026-03-13
+
+### Changed
+
+- razor-rpc-macros: Provide `endpoint_client!(ClientName)` for generate client, `#[endpoint_async(ClientName)]` to impl service trait for client.
+  Allow impl multiple service for a client.
+
+- razor-rpc: Change AsyncEndpoint & BlockEndpoint from struct to helper trait.
+
+### Removed
+
+- razor-rpc-macros: Drop the support of #[service] on impl block
+
 ## [0.5.0] - 2026-03-12
 
 ### Changed
