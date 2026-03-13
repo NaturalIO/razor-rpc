@@ -10,9 +10,6 @@ use rstest::*;
 use std::fmt;
 
 #[cfg(feature = "tokio")]
-use tokio::runtime::Runtime;
-
-#[cfg(feature = "tokio")]
 pub type RT = orb_tokio::TokioRT;
 #[cfg(not(feature = "tokio"))]
 pub type RT = orb_smol::SmolRT;
