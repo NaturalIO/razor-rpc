@@ -15,18 +15,21 @@
 //!   - Encoded as `0u32`
 //!   - Used when no additional error information is needed
 //!
-//! - **`String`**
+//! - `String` and &str
 //!   - Encoded as UTF-8 bytes
 //!   - Useful for descriptive error messages
 //!
-//! - **`nix::errno::Errno`**
+//! - `nix::errno::Errno`
 //!   - Encoded as `u32` values
 //!   - For system-level error codes
 //!
 //! # Custom Error Types
 //!
 //! To use your own error type in RPC methods, implement the [`RpcErrCodec`] trait.
-//! There are two common approaches:
+//!
+//! Keep in mind that your type should can be serialized into or deserialized from one of the
+//! variants of [EncodedErr].
+//! You have to choose in-between numeric or string:
 //!
 //! ## Approach 1: Numeric Encoding (errno-style)
 //!
