@@ -15,8 +15,6 @@ fn test_client_drop(runner: TestRunner, #[case] is_tcp: bool) {
     let client_config = ClientConfig::default();
     let server_config = ServerConfig::default();
     let request_count = Arc::new(AtomicUsize::new(0));
-    let rt_server = runner.rt.clone();
-    let rt_client = runner.rt.clone();
     let dispatch_task = {
         let req_count = request_count.clone();
         move |task: FileServerTask| {
@@ -42,18 +40,19 @@ fn test_client_drop(runner: TestRunner, #[case] is_tcp: bool) {
         }
     };
 
+    let rt = runner.rt.clone();
     runner.block_on(async move {
         let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-socket" };
         let (_server, actual_server_addr) = init_server_closure::<_, _, crate::RT>(
             dispatch_task,
             server_config.clone(),
             &server_bind_addr,
-            rt_server,
+            rt.clone(),
         )
         .await
         .expect("server listen");
         debug!("client addr {:?}", actual_server_addr);
-        let mut client = init_client(client_config, &actual_server_addr, None, rt_client)
+        let mut client = init_client(client_config, &actual_server_addr, None, &rt)
             .await
             .expect("connect client");
 

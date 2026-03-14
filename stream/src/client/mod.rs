@@ -56,14 +56,7 @@ impl Default for ClientConfig {
 }
 
 /// A trait implemented by the user for the client-side, to define the customizable plugin.
-///
-/// # NOTE
-///
-/// If you choose implement this trait rather than use [ClientDefault].
-/// We recommend your implementation to Deref<Target=orb::AsyncRuntime>
-/// then the blanket trait in `orb::AsyncRuntime` will automatically impl AsyncRuntime on your ClientFacts type.
-/// Refer to the code of [ClientDefault] for example.
-pub trait ClientFacts: orb::AsyncRuntime + Send + Sync + Sized + 'static {
+pub trait ClientFacts: Send + Sync + Sized + 'static {
     /// Define the codec to serialization and deserialization
     ///
     /// Refers to [Codec]
@@ -143,12 +136,6 @@ impl<C: ClientCallerBlocking + Send + Sync> ClientCallerBlocking for Arc<C> {
 /// The implementation can be found on:
 ///
 /// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
-///
-/// # NOTE:
-///
-/// Instead of binding this to ClientFacts,
-/// we use the associate type `RT` in generic param instead of ClientFacts to break cycle dep.
-/// because [FailoverPool] will rewrap the facts into its own.
 pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
     /// How to establish an async connection.
     ///
@@ -178,16 +165,15 @@ pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
 }
 
 /// An example ClientFacts for general use
-pub struct ClientDefault<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> {
+pub struct ClientDefault<T: ClientTask, C: Codec> {
     pub logger: Arc<LogFilter>,
     config: ClientConfig,
-    rt: RT,
     _phan: std::marker::PhantomData<fn(&C, &T)>,
 }
 
-impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientDefault<T, RT, C> {
-    pub fn new(config: ClientConfig, rt: RT) -> Arc<Self> {
-        Arc::new(Self { logger: Arc::new(LogFilter::new()), config, rt, _phan: Default::default() })
+impl<T: ClientTask, C: Codec> ClientDefault<T, C> {
+    pub fn new(config: ClientConfig) -> Arc<Self> {
+        Arc::new(Self { logger: Arc::new(LogFilter::new()), config, _phan: Default::default() })
     }
 
     #[inline]
@@ -196,14 +182,7 @@ impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientDefault<T, RT, C> {
     }
 }
 
-impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> std::ops::Deref for ClientDefault<T, RT, C> {
-    type Target = RT;
-    fn deref(&self) -> &Self::Target {
-        &self.rt
-    }
-}
-
-impl<T: ClientTask, RT: orb::AsyncRuntime, C: Codec> ClientFacts for ClientDefault<T, RT, C> {
+impl<T: ClientTask, C: Codec> ClientFacts for ClientDefault<T, C> {
     type Codec = C;
     type Task = T;
 

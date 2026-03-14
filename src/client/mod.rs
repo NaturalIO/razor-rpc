@@ -1,6 +1,7 @@
 pub mod task;
 use crossfire::oneshot::oneshot;
 use crossfire::*;
+use orb::AsyncRuntime;
 pub use razor_rpc_macros::{endpoint_async, endpoint_client};
 pub use razor_stream::client::ClientCaller;
 pub use task::*;
@@ -13,7 +14,7 @@ pub use razor_stream::client::{
 use std::fmt;
 use std::sync::Arc;
 
-pub type APIClientDefault<IO, C> = razor_stream::client::ClientDefault<APIClientReq, IO, C>;
+pub type APIClientDefault<C> = razor_stream::client::ClientDefault<APIClientReq, C>;
 
 /// Optional helper trait to Provide two convenient function to crete ClientPool / FailoverPool
 ///
@@ -24,14 +25,16 @@ pub type APIClientDefault<IO, C> = razor_stream::client::ClientDefault<APIClient
 /// use razor_rpc::client::APIClientFacts;
 /// ```
 pub trait APIClientFacts: ClientFacts<Task = APIClientReq> {
-    fn create_pool_async<T: ClientTransport>(self: Arc<Self>, addr: &str) -> ClientPool<Self, T> {
-        ClientPool::new(self.clone(), addr, 0)
+    fn create_pool_async<T: ClientTransport, RT: AsyncRuntime + Clone>(
+        self: Arc<Self>, rt: &RT, addr: &str,
+    ) -> ClientPool<Self, T> {
+        ClientPool::new::<RT>(self.clone(), rt, addr, 0)
     }
 
-    fn create_failover_async<T: ClientTransport>(
-        self: Arc<Self>, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
+    fn create_failover_async<T: ClientTransport, RT: AsyncRuntime + Clone>(
+        self: Arc<Self>, rt: &RT, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
     ) -> Arc<FailoverPool<Self, T>> {
-        Arc::new(FailoverPool::new(self.clone(), addrs, round_robin, retry_limit, 0))
+        Arc::new(FailoverPool::new::<RT>(self.clone(), rt, addrs, round_robin, retry_limit, 0))
     }
 }
 

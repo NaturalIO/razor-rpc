@@ -10,6 +10,7 @@ use crate::{
 use arc_swap::ArcSwap;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MTx, SendError, mpsc};
+use orb::AsyncRuntime;
 use std::fmt;
 use std::sync::{
     Arc, Weak,
@@ -71,8 +72,8 @@ where
     /// Initiate the pool with multiple address.
     /// When round_robin == true, all address in the pool will be select with equal chanced;
     /// When round_robin == false, the first address will always be pick unless error happens.
-    pub fn new(
-        facts: Arc<F>, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
+    pub fn new<RT: AsyncRuntime + Clone>(
+        facts: Arc<F>, rt: &RT, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
         pool_channel_size: usize,
     ) -> Self {
         let (retry_tx, retry_rx) = mpsc::unbounded_async();
@@ -81,7 +82,7 @@ where
             Arc::new(FailoverFacts { retry_limit, retry_tx, logger: facts.new_logger(), facts });
         let mut pools = Vec::with_capacity(addrs.len());
         for addr in addrs.iter() {
-            let pool = ClientPool::new(wrapped_facts.clone(), addr, pool_channel_size);
+            let pool = ClientPool::new::<RT>(wrapped_facts.clone(), rt, addr, pool_channel_size);
             pools.push(pool);
         }
         // NOTE: the ClientPool has cycle reference with FailoverPoolInner
@@ -94,13 +95,13 @@ where
             pool_channel_size,
         });
         let weak_self = Arc::downgrade(&inner);
-        inner.facts.spawn_detach(async move {
+        rt.spawn_detach(async move {
             FailoverPoolInner::retry_worker(weak_self, retry_logger, retry_rx).await;
         });
         Self { inner }
     }
 
-    pub fn update_addrs(&self, addrs: Vec<String>) {
+    pub fn update_addrs<RT: AsyncRuntime + Clone>(&self, addrs: Vec<String>, rt: &RT) {
         let inner = &self.inner;
         let old_pools = inner.pools.load_full();
         let mut new_pools: Vec<ClientPool<FailoverFacts<F>, P>> = Vec::with_capacity(addrs.len());
@@ -115,7 +116,8 @@ where
                 new_pools.push(reused_pool.clone());
             } else {
                 // Create a new pool for the new address
-                let new_pool = ClientPool::new(inner.facts.clone(), &addr, inner.pool_channel_size);
+                let new_pool =
+                    ClientPool::new::<RT>(inner.facts.clone(), rt, &addr, inner.pool_channel_size);
                 new_pools.push(new_pool);
             }
         }

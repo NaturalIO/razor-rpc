@@ -24,6 +24,7 @@ use rstest::*;
 fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
     let client_config = ClientConfig::default();
     let server_config = ServerConfig::default();
+    let rt = &runner.rt;
 
     let dispatch_task = move |task: FileServerTask| async move {
         match task {
@@ -61,9 +62,9 @@ fn test_throughput(runner: TestRunner, #[case] is_tcp: bool) {
                 .expect("server listen");
         println!("actual_addr: {}", actual_server_addr);
         let mut client = if is_tcp {
-            init_client(client_config, &actual_server_addr, None).await.expect("connect client")
+            init_client(client_config, &actual_server_addr, None, rt).await.expect("connect client")
         } else {
-            init_client(client_config, server_bind_addr, None).await.expect("connect client")
+            init_client(client_config, server_bind_addr, None, rt).await.expect("connect client")
         };
 
         // Test Open task

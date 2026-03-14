@@ -45,12 +45,17 @@ pub struct ClientStream<F: ClientFacts, P: ClientTransport> {
 impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
     /// Make a streaming connection to the server, returns [ClientStream] on success
     #[inline]
-    pub async fn connect(
-        facts: Arc<F>, addr: &str, conn_id: &str, last_resp_ts: Option<Arc<AtomicU64>>,
+    pub async fn connect<RT: orb::AsyncRuntime>(
+        facts: Arc<F>, rt: &RT, addr: &str, conn_id: &str, last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Result<Self, RpcIntErr> {
         let client_id = facts.get_client_id();
         let conn = P::connect(addr, conn_id, facts.get_config()).await?;
-        Ok(Self::new(facts, conn, client_id, conn_id.to_string(), last_resp_ts))
+        let this = Self::new(facts, conn, client_id, conn_id.to_string(), last_resp_ts);
+        let inner = this.inner.clone();
+        rt.spawn_detach(async move {
+            inner.receive_loop::<RT>().await;
+        });
+        Ok(this)
     }
 
     #[inline]
@@ -68,10 +73,6 @@ impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
             last_resp_ts,
         ));
         logger_debug!(inner.logger, "{:?} connected", inner);
-        let _inner = inner.clone();
-        inner.facts.spawn_detach(async move {
-            _inner.receive_loop().await;
-        });
         Self { close_tx: Some(_close_tx), inner }
     }
 
@@ -408,8 +409,8 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
         }
     }
 
-    async fn receive_loop(&self) {
-        let mut tick = <F as AsyncTime>::interval(Duration::from_secs(1));
+    async fn receive_loop<RT: AsyncRuntime>(&self) {
+        let mut tick = <RT as AsyncTime>::interval(Duration::from_secs(1));
         loop {
             let f = self.recv_some();
             pin_mut!(f);
@@ -427,7 +428,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                         // pending_task_count will not keep growing,
                         // so there is no need to sleep here.
                         timer.clean_pending_tasks(self.facts.as_ref());
-                        <F as AsyncTime>::sleep(Duration::from_secs(1)).await;
+                        <RT as AsyncTime>::sleep(Duration::from_secs(1)).await;
                     }
                     return;
                 }

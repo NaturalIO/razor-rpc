@@ -17,8 +17,7 @@ fn test_client_task_timeout(runner: TestRunner, #[case] is_tcp: bool) {
         ..Default::default()
     };
     let server_config = ServerConfig::default();
-    let rt_server = runner.rt.clone();
-    let rt_client = runner.rt.clone();
+    let rt = runner.rt.clone();
 
     let dispatch_task = move |task: FileServerTask| {
         async move {
@@ -46,12 +45,12 @@ fn test_client_task_timeout(runner: TestRunner, #[case] is_tcp: bool) {
             dispatch_task,
             server_config.clone(),
             &server_bind_addr,
-            rt_server,
+            rt.clone(),
         )
         .await
         .expect("server listen");
         debug!("client addr {:?}", actual_server_addr);
-        let mut client = init_client(client_config, &actual_server_addr, None, rt_client)
+        let mut client = init_client(client_config, &actual_server_addr, None, &rt)
             .await
             .expect("connect client");
 

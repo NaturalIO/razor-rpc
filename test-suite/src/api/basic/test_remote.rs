@@ -21,8 +21,6 @@ use crate::api::service::{CalService, EchoService};
 #[case(true, "service_mux_struct")]
 #[case(false, "service_mux_struct")]
 fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispatch_type: String) {
-    let rt_server = runner.rt.clone();
-    let rt_client = runner.rt.clone();
     runner.block_on(async move {
         let client_config = ClientConfig::default();
         let server_config = ServerConfig::default();
@@ -42,7 +40,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
         let echo_server = EchoServer {};
 
         // Create server
-        let mut server = create_api_server(server_config.clone(), rt_server);
+        let mut server = create_api_server(server_config.clone(), runner.rt.clone());
 
         let (_server, actual_server_addr) = match dispatch_type.as_str() {
             "service_mux_dyn" => {
@@ -68,7 +66,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
 
         debug!("API server addr {:?}", actual_server_addr);
 
-        let client = MyClient::<MsgpCodec>::new(client_config, &actual_server_addr, rt_client);
+        let client = MyClient::<MsgpCodec>::new(client_config, &actual_server_addr, &runner.rt);
 
         // Test CalService methods
         // Test inc method

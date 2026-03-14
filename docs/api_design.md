@@ -133,11 +133,11 @@ use std::future::Future;
 use std::sync::Arc;
 
 // 1. Choose the async runtime, and the codec
-type OurRt = orb_tokio::TokioRT;
-type OurCodec = razor_rpc_codec::MsgpCodec;
+type RT = orb_tokio::TokioRT;
+type Codec = razor_rpc_codec::MsgpCodec;
 // 2. Choose transport
-type ServerProto = TcpServer<OurRt>;
-type ClientProto = TcpClient<OurRt>;
+type ServerProto = TcpServer<RT>;
+type ClientProto = TcpClient<RT>;
 
 // 3. Define the client struct and service trait
 endpoint_client!(CalculatorClient);
@@ -187,10 +187,10 @@ async fn setup_server() -> std::io::Result<String> {
     // 5. Server setup with default ServerFacts
     use razor_rpc::server::{RpcServer, ServerDefault};
     let server_config = ServerConfig::default();
-    let mut server = RpcServer::new(ServerDefault::new(server_config, OurRt::new_multi_thread(8)));
+    let mut server = RpcServer::new(ServerDefault::new(server_config, RT::new_multi_thread(8)));
     // 6. dispatch
     use razor_rpc::server::dispatch::Inline;
-    let disp = Inline::<OurCodec, _>::new(CalculatorServer);
+    let disp = Inline::<Codec, _>::new(CalculatorServer);
     // 7. Start listening
     let actual_addr = server.listen::<ServerProto, _>("127.0.0.1:8082", disp).await?;
     Ok(actual_addr)
@@ -201,12 +201,12 @@ async fn use_client(server_addr: &str) {
     // 8. ClientFacts
     let mut client_config = ClientConfig::default();
     client_config.task_timeout = 5;
-    let rt = OurRt::new_multi_thread(8);
-    type OurFacts = APIClientDefault<OurRt, OurCodec>;
-    let client_facts = OurFacts::new(client_config, rt);
+    let rt = RT::new_multi_thread(8);
+    type Facts = APIClientDefault<Codec>;
+    let client_facts = Facts::new(client_config);
     // 9. Create client connection pool
-    let pool: ClientPool<OurFacts, ClientProto> =
-        client_facts.create_pool_async::<ClientProto>(server_addr);
+    let pool: ClientPool<Facts, ClientProto> =
+        client_facts.create_pool_async::<ClientProto, RT>(&rt, server_addr);
     let client = CalculatorClient::new(pool);
     //  You will have to import CalculatorService trait to call its methods
     use CalculatorService;

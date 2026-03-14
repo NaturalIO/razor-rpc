@@ -10,15 +10,15 @@ use razor_stream::error::{RpcError, RpcIntErr};
 use serde_derive::{Deserialize, Serialize};
 use std::sync::{Arc, atomic::AtomicU64};
 
-pub type MyClient = ClientDefault<FileClientTask, crate::RT, MsgpCodec>;
+pub type MyClient = ClientDefault<FileClientTask, MsgpCodec>;
 
 pub type FileClient = ClientStream<MyClient, TcpClient<crate::RT>>;
 
 pub async fn init_client(
-    config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>, rt: crate::RT,
+    config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>, rt: &crate::RT,
 ) -> Result<FileClient, RpcIntErr> {
-    let facts = MyClient::new(config, rt);
-    FileClient::connect(facts, addr, &format!("to {}", addr), last_resp_ts).await
+    let facts = MyClient::new(config);
+    FileClient::connect(facts, rt, addr, &format!("to {}", addr), last_resp_ts).await
 }
 
 #[derive(PartialEq, Debug)]
@@ -159,14 +159,15 @@ impl FileClientTaskWrite {
 }
 
 pub async fn init_failover_client(
-    config: ClientConfig, addrs: Vec<String>, round_robin: bool, rt: crate::RT,
+    config: ClientConfig, addrs: Vec<String>, round_robin: bool, rt: &crate::RT,
 ) -> FailoverPool<MyClient, TcpClient<crate::RT>> {
     // NOTE: Do not new rt to the client, pass a handle from TestRunner.
     // since client may be drop by test logic, it's not allow
     // to drop a tokio runtime inside async code.
-    let facts = MyClient::new(config, rt);
-    FailoverPool::new(
+    let facts = MyClient::new(config);
+    FailoverPool::new::<crate::RT>(
         facts,
+        rt,
         addrs,
         round_robin,
         3,   // retry_limit

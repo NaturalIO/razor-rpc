@@ -14,8 +14,7 @@ use std::time::Duration;
 #[case(true)]
 #[case(false)]
 fn test_round_robin_distribution(runner: TestRunner, #[case] is_tcp: bool) {
-    let rt_server = runner.rt.clone();
-    let rt_client = runner.rt.clone();
+    let rt = runner.rt.clone();
     runner.block_on(async move {
         let client_config = ClientConfig::default();
         let server_config = ServerConfig::default();
@@ -70,12 +69,11 @@ fn test_round_robin_distribution(runner: TestRunner, #[case] is_tcp: bool) {
 
         // Start server 1
         let server_bind_addr1 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-1" };
-        let rt_server1 = rt_server.clone();
         let (_server1, server1_addr) = init_server_closure::<_, _, crate::RT>(
             dispatch_task1,
             server_config.clone(),
             &server_bind_addr1,
-            rt_server1,
+            rt.clone(),
         )
         .await
         .expect("server1 listen");
@@ -86,15 +84,14 @@ fn test_round_robin_distribution(runner: TestRunner, #[case] is_tcp: bool) {
             dispatch_task2,
             server_config.clone(),
             &server_bind_addr2,
-            rt_server,
+            rt.clone(),
         )
         .await
         .expect("server2 listen");
 
         // Create failover client with round-robin enabled
         let addrs = vec![server1_addr.clone(), server2_addr.clone()];
-        let client =
-            init_failover_client(client_config, addrs, true /* round_robin */, rt_client).await;
+        let client = init_failover_client(client_config, addrs, true /* round_robin */, &rt).await;
 
         // Send multiple requests and verify distribution
         let (tx, rx) = mpsc::unbounded_async::<FileClientTask>();
