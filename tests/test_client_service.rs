@@ -34,7 +34,7 @@ impl MockCaller {
 }
 
 impl ClientCaller for MockCaller {
-    type Facts = ClientDefault<APIClientReq, orb_tokio::TokioRT, MsgpCodec>;
+    type Facts = ClientDefault<APIClientReq, MsgpCodec>;
 
     async fn send_req(&self, mut task: APIClientReq) {
         println!("Sending request: {:?}", task);
