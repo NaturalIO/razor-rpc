@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.7.0] - 2026-03-14
+
+### Changed
+
+- ClientFacts & ServerFacts no lonnger inherits orb::AsyncRuntime.
+
+- All ClientCaller use explicit runtime parameter to spawn.
+
+- Server listen and close need explicit runtime parameter.
+
 ## [0.6.0] - 2026-03-13
 
 ### Changed
