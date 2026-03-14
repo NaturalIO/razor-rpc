@@ -69,25 +69,17 @@ fn test_round_robin_distribution(runner: TestRunner, #[case] is_tcp: bool) {
 
         // Start server 1
         let server_bind_addr1 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-1" };
-        let (_server1, server1_addr) = init_server_closure::<_, _, crate::RT>(
-            dispatch_task1,
-            server_config.clone(),
-            &server_bind_addr1,
-            rt.clone(),
-        )
-        .await
-        .expect("server1 listen");
+        let (_server1, server1_addr) =
+            init_server_closure(dispatch_task1, server_config.clone(), &server_bind_addr1, &rt)
+                .await
+                .expect("server1 listen");
 
         // Start server 2
         let server_bind_addr2 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-2" };
-        let (_server2, server2_addr) = init_server_closure::<_, _, crate::RT>(
-            dispatch_task2,
-            server_config.clone(),
-            &server_bind_addr2,
-            rt.clone(),
-        )
-        .await
-        .expect("server2 listen");
+        let (_server2, server2_addr) =
+            init_server_closure(dispatch_task2, server_config.clone(), &server_bind_addr2, &rt)
+                .await
+                .expect("server2 listen");
 
         // Create failover client with round-robin enabled
         let addrs = vec![server1_addr.clone(), server2_addr.clone()];

@@ -51,12 +51,7 @@ impl Default for ServerConfig {
 /// A central hub defined by the user for the server-side, to define the customizable plugin.
 ///
 /// # NOTE
-///
-/// If you choose implement this trait rather than use [ServerDefault]
-/// We recommend your implementation to Deref<Target=orb::AsyncRuntime>
-/// then the blanket trait in `orb` crate will automatically impl AsyncRuntime on your ClientFacts type.
-/// Refer to the code of [ServerDefault] for example.
-pub trait ServerFacts: orb::AsyncRuntime + Sync + Send + 'static + Sized {
+pub trait ServerFacts: Sync + Send + 'static + Sized {
     /// You should keep ServerConfig inside, get_config() will return the reference.
     fn get_config(&self) -> &ServerConfig;
 
@@ -153,15 +148,14 @@ impl task::ServerTaskEncode for RpcSvrResp {
 }
 
 /// An ServerFacts for general use
-pub struct ServerDefault<RT: AsyncRuntime> {
+pub struct ServerDefault {
     pub logger: Arc<LogFilter>,
     config: ServerConfig,
-    rt: RT,
 }
 
-impl<RT: AsyncRuntime> ServerDefault<RT> {
-    pub fn new(config: ServerConfig, rt: RT) -> Arc<Self> {
-        Arc::new(Self { logger: Arc::new(LogFilter::new()), config, rt })
+impl ServerDefault {
+    pub fn new(config: ServerConfig) -> Arc<Self> {
+        Arc::new(Self { logger: Arc::new(LogFilter::new()), config })
     }
 
     #[inline]
@@ -170,14 +164,7 @@ impl<RT: AsyncRuntime> ServerDefault<RT> {
     }
 }
 
-impl<RT: AsyncRuntime> std::ops::Deref for ServerDefault<RT> {
-    type Target = RT;
-    fn deref(&self) -> &Self::Target {
-        &self.rt
-    }
-}
-
-impl<RT: AsyncRuntime> ServerFacts for ServerDefault<RT> {
+impl ServerFacts for ServerDefault {
     #[inline]
     fn new_logger(&self) -> Arc<LogFilter> {
         self.logger.clone()

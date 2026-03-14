@@ -2,6 +2,7 @@ use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MAsyncRx, mpmc, mpsc, null::CloseHandle};
+use orb::prelude::{AsyncRuntime, AsyncTime};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -12,7 +13,7 @@ where
     F: ServerFacts,
 {
     // join handles
-    listeners_abort: Vec<(<F as AsyncExec>::AsyncHandle<()>, String)>,
+    listeners_abort: Vec<(Box<dyn AsyncHandle<()>>, String)>,
     logger: Arc<LogFilter>,
     facts: Arc<F>,
     conn_ref_count: Arc<()>,
@@ -38,8 +39,8 @@ where
         }
     }
 
-    pub async fn listen<T: ServerTransport, D: Dispatch>(
-        &mut self, addr: &str, dispatch: D,
+    pub async fn listen<RT: AsyncRuntime + Clone, T: ServerTransport, D: Dispatch>(
+        &mut self, rt: RT, addr: &str, dispatch: D,
     ) -> io::Result<String> {
         match T::bind(addr).await {
             Err(e) => {
@@ -63,7 +64,8 @@ where
                 let listener_info = format!("listener {:?}", addr);
                 let server_close_rx = self.server_close_rx.clone();
                 debug!("listening on {:?}", listener);
-                let handle = self.facts.spawn(async move {
+                let _rt = rt.clone();
+                let handle = rt.spawn(async move {
                     loop {
                         match listener.accept().await {
                             Err(e) => {
@@ -73,7 +75,8 @@ where
                             Ok(stream) => {
                                 let conn =
                                     T::new_conn(stream, facts.get_config(), conn_ref_count.clone());
-                                Self::server_conn::<T, D>(
+                                Self::server_conn::<RT, T, D>(
+                                    &_rt,
                                     conn,
                                     &facts,
                                     dispatch.clone(),
@@ -83,14 +86,14 @@ where
                         }
                     }
                 });
-                self.listeners_abort.push((handle, listener_info));
+                self.listeners_abort.push((Box::new(handle), listener_info));
                 return Ok(local_addr);
             }
         }
     }
 
-    fn server_conn<T: ServerTransport, D: Dispatch>(
-        conn: T, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
+    fn server_conn<RT: AsyncRuntime + Clone, T: ServerTransport, D: Dispatch>(
+        rt: &RT, conn: T, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
     ) {
         let conn = Arc::new(conn);
 
@@ -114,7 +117,7 @@ where
             server_close_rx,
             logger: facts.new_logger(),
         };
-        facts.spawn_detach(async move { reader.run().await });
+        rt.spawn_detach(async move { reader.run().await });
 
         impl<T: ServerTransport, D: Dispatch> Reader<T, D> {
             async fn run(self) -> Result<(), ()> {
@@ -161,7 +164,7 @@ where
             logger: Arc<LogFilter>,
         }
         let writer = Writer::<T, D> { done_rx, codec, conn, logger: facts.new_logger() };
-        facts.spawn_detach(async move { writer.run().await });
+        rt.spawn_detach(async move { writer.run().await });
 
         impl<T: ServerTransport, D: Dispatch> Writer<T, D> {
             async fn run(self) -> Result<(), io::Error> {
@@ -211,11 +214,11 @@ where
     /// - the writer coroutines will exit after all the reference of RespNoti channel drop to 0
     /// - wait for connection coroutines to exit with a timeout defined by
     ///   ServerConfig.server_close_wait
-    pub async fn close(&mut self) {
+    pub async fn close<RT: AsyncTime>(&mut self) {
         // close listeners
-        for h in self.listeners_abort.drain(0..) {
-            h.0.abort();
-            logger_info!(self.logger, "{} has closed", h.1);
+        while let Some((h, addr)) = self.listeners_abort.pop() {
+            h.abort_boxed();
+            logger_info!(self.logger, "{} has closed", addr);
         }
         // Notify all reader connection exit, then the reader will notify writer
         let _ = self.server_close_tx.lock().unwrap().take();
@@ -225,7 +228,7 @@ where
         let start_ts = Instant::now();
         let config = self.facts.get_config();
         while exists_count > 0 {
-            F::sleep(Duration::from_secs(1)).await;
+            RT::sleep(Duration::from_secs(1)).await;
             exists_count = self.get_alive_conn();
             if Instant::now().duration_since(start_ts) > config.server_close_wait {
                 logger_warn!(

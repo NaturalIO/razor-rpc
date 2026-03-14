@@ -21,6 +21,7 @@ use crate::api::service::{CalService, EchoService};
 #[case(true, "service_mux_struct")]
 #[case(false, "service_mux_struct")]
 fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispatch_type: String) {
+    let rt = runner.rt.clone();
     runner.block_on(async move {
         let client_config = ClientConfig::default();
         let server_config = ServerConfig::default();
@@ -40,14 +41,18 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
         let echo_server = EchoServer {};
 
         // Create server
-        let mut server = create_api_server(server_config.clone(), runner.rt.clone());
+        let mut server = create_api_server(server_config.clone());
 
         let (_server, actual_server_addr) = match dispatch_type.as_str() {
             "service_mux_dyn" => {
                 // Use the service mux dyn dispatch
                 let dispatch = create_service_mux_dispatch(cal_server, echo_server);
                 let actual_addr = server
-                    .listen::<TcpServer<crate::RT>, _>(&server_bind_addr, dispatch)
+                    .listen::<crate::RT, TcpServer<crate::RT>, _>(
+                        rt.clone(),
+                        &server_bind_addr,
+                        dispatch,
+                    )
                     .await
                     .expect("server listen");
                 (server, actual_addr)
@@ -56,7 +61,11 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
                 // Use service mux struct dispatch
                 let dispatch = create_service_mux_struct_dispatch(cal_server, echo_server);
                 let actual_addr = server
-                    .listen::<TcpServer<crate::RT>, _>(&server_bind_addr, dispatch)
+                    .listen::<crate::RT, TcpServer<crate::RT>, _>(
+                        rt.clone(),
+                        &server_bind_addr,
+                        dispatch,
+                    )
                     .await
                     .expect("server listen");
                 (server, actual_addr)
@@ -66,7 +75,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
 
         debug!("API server addr {:?}", actual_server_addr);
 
-        let client = MyClient::<MsgpCodec>::new(client_config, &actual_server_addr, &runner.rt);
+        let client = MyClient::<MsgpCodec>::new(client_config, &actual_server_addr, &rt);
 
         // Test CalService methods
         // Test inc method

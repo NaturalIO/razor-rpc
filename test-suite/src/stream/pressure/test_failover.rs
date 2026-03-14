@@ -70,25 +70,17 @@ fn test_failover_on_server_exit(runner: TestRunner, #[case] round_robin: bool) {
         let is_tcp = true;
         // Start server 1
         let server_bind_addr1 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-failover-1" };
-        let (server1, server1_addr) = init_server_closure::<_, _, crate::RT>(
-            dispatch_task1,
-            server_config.clone(),
-            &server_bind_addr1,
-            rt.clone(),
-        )
-        .await
-        .expect("server1 listen");
+        let (server1, server1_addr) =
+            init_server_closure(dispatch_task1, server_config.clone(), &server_bind_addr1, &rt)
+                .await
+                .expect("server1 listen");
 
         // Start server 2
         let server_bind_addr2 = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-failover-2" };
-        let (_server2, server2_addr) = init_server_closure::<_, _, crate::RT>(
-            dispatch_task2,
-            server_config.clone(),
-            &server_bind_addr2,
-            rt.clone(),
-        )
-        .await
-        .expect("server2 listen");
+        let (_server2, server2_addr) =
+            init_server_closure(dispatch_task2, server_config.clone(), &server_bind_addr2, &rt)
+                .await
+                .expect("server2 listen");
         println!("server1 {} server2 {}", server1_addr, server2_addr);
 
         // Create failover client (without round-robin for clearer failover behavior)

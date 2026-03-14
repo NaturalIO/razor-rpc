@@ -8,7 +8,7 @@ use razor_stream::server::{RpcServer, ServerConfig};
 use rstest::*;
 use std::sync::Arc;
 
-pub type APIServer = razor_rpc::server::ServerDefault<crate::RT>;
+pub type APIServer = razor_rpc::server::ServerDefault;
 
 #[derive(Clone, Debug)]
 pub struct CalServer();
@@ -49,11 +49,11 @@ impl EchoService for EchoServer {
 }
 
 // Create an API server with the given services
-pub fn create_api_server(config: ServerConfig, rt: crate::RT) -> RpcServer<APIServer> {
+pub fn create_api_server(config: ServerConfig) -> RpcServer<APIServer> {
     // NOTE: Do not new rt to the client, pass a handle from TestRunner.
     // since client may be drop by test logic, it's not allow
     // to drop a tokio runtime inside async code.
-    let facts = APIServer::new(config, rt);
+    let facts = APIServer::new(config);
     let server = RpcServer::new(facts);
     server
 }
@@ -61,7 +61,7 @@ pub fn create_api_server(config: ServerConfig, rt: crate::RT) -> RpcServer<APISe
 // Add services to the server and start listening
 pub async fn listen_with_services(
     mut server: RpcServer<APIServer>, bind_addr: &str, cal_server: CalServer,
-    echo_server: EchoServer,
+    echo_server: EchoServer, rt: &crate::RT,
 ) -> Result<(RpcServer<APIServer>, String), Box<dyn std::error::Error>> {
     // Create service mux and add services
     let mut service_mux = ServiceMuxDyn::<MsgpCodec>::new();
@@ -72,7 +72,9 @@ pub async fn listen_with_services(
     let dispatch = Inline::new(Arc::new(service_mux));
 
     // Listen on the address
-    let actual_addr = server.listen::<TcpServer<crate::RT>, _>(bind_addr, dispatch).await?;
+    let actual_addr = server
+        .listen::<crate::RT, TcpServer<crate::RT>, _>(rt.clone(), bind_addr, dispatch)
+        .await?;
 
     Ok((server, actual_addr))
 }

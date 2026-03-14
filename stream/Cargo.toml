@@ -22,7 +22,7 @@ close_fds = ">=0.3.2"
 strum = {version = "0", features = ["derive"]}
 nix = "0"
 thiserror = "2"
-orb = { version="0" }
+orb = ">=0.7"
 arc-swap = "1"
 razor-rpc-codec = {path="../codec/", version=">=0.3"}
 razor-stream-macros = {path="macros", version=">=0.4"}
