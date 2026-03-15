@@ -1,2 +1,2 @@
 #[cfg(test)]
-pub mod test_remote;
+pub mod test_multi_service;
