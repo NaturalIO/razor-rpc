@@ -212,3 +212,121 @@ async fn use_client(server_addr: &str) {
     }
 }
 ```
+
+## Stateful Leader-Follower Service Example
+
+For services with leader-follower architecture (e.g., distributed KV store, Raft cluster), use `APIFailoverPool` with `stateless=false` to maintain leader affinity and handle redirect errors.
+
+```rust
+use razor_rpc::client::{endpoint_client, endpoint_async, APIFact, APIFailoverPool, ClientConfig};
+use razor_rpc::error::{RpcErrCodec, RpcError, EncodedErr};
+use razor_rpc_tcp::{TcpClient, TcpServer};
+use std::future::Future;
+use std::sync::Arc;
+
+// Define cluster error types
+const REDIRECT_PREFIX: &str = "redirect_";
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClusterErr {
+    /// Redirect to leader at specific address
+    Redirect(String),
+    /// Retry to next node (e.g., node shutting down)
+    RetryNext,
+    /// Internal error, don't retry
+    Internal,
+}
+
+impl RpcErrCodec for ClusterErr {
+    fn encode<C: razor_rpc::Codec>(&self, _codec: &C) -> EncodedErr {
+        match self {
+            Self::Redirect(addr) => EncodedErr::Buf(format!("{}{}", REDIRECT_PREFIX, addr).into_bytes()),
+            Self::RetryNext => EncodedErr::Static("retry_next"),
+            Self::Internal => EncodedErr::Static("internal"),
+        }
+    }
+
+    fn decode<C: razor_rpc::Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
+        if let Err(bytes) = buf {
+            let s = unsafe { std::str::from_utf8_unchecked(bytes) };
+            if s.starts_with(REDIRECT_PREFIX) {
+                Ok(Self::Redirect(s[REDIRECT_PREFIX.len()..].to_string()))
+            } else if s == "retry_next" {
+                Ok(Self::RetryNext)
+            } else if s == "internal" {
+                Ok(Self::Internal)
+            } else {
+                Err(())
+            }
+        } else {
+            Err(())
+        }
+    }
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+
+    fn should_failover(&self) -> Result<Option<&str>, ()> {
+        match self {
+            Self::Redirect(addr) => Ok(Some(addr)),  // Retry to specific leader
+            Self::RetryNext => Ok(None),              // Retry to next node
+            Self::Internal => Err(()),                // Don't retry
+        }
+    }
+}
+
+// Client definition
+endpoint_client!(KVClient);
+
+#[endpoint_async(KVClient)]
+pub trait KVService {
+    // Note: endpoint_async macro requires exactly one parameter besides &self
+    fn put(&self, kv: (String, String)) 
+        -> impl Future<Output = Result<(), RpcError<ClusterErr>>> + Send;
+    fn get(&self, key: String) 
+        -> impl Future<Output = Result<Option<String>, RpcError<String>>> + Send;
+}
+
+// Client initialization with failover pool
+type RT = orb_tokio::TokioRT;
+type Codec = razor_rpc_codec::MsgpCodec;
+type FailoverCaller = razor_rpc::client::APIFailoverPool<Codec, TcpClient<RT>>;
+
+impl KVClient<FailoverCaller> {
+    pub fn new_cluster_client(
+        config: ClientConfig, 
+        addrs: Vec<String>, 
+        rt: &RT
+    ) -> Self {
+        let fact = APIFact::<Codec>::new(config);
+        // stateless=false: maintain leader affinity for stateful service
+        let pool = fact.new_failover::<TcpClient<RT>, RT>(rt, addrs, false, 3);
+        KVClient::new(pool)
+    }
+}
+
+// Usage
+async fn example() {
+    let rt = RT::new_multi_thread(8);
+    let config = ClientConfig::default();
+    let addrs = vec![
+        "127.0.0.1:8080".to_string(),
+        "127.0.0.1:8081".to_string(),
+        "127.0.0.1:8082".to_string(),
+    ];
+    
+    let client = KVClient::new_cluster_client(config, addrs, &rt);
+    
+    // Write goes to leader (with automatic redirect if needed)
+    client.put(("key1".to_string(), "value1".to_string())).await.unwrap();
+    
+    // Read can go to any node
+    let value = client.get("key1".to_string()).await.unwrap();
+}
+```
+
+Key points:
+- Use `should_failover()` to control retry behavior: `Ok(Some(addr))` for redirect, `Ok(None)` for retry to next node, `Err(())` to stop retrying
+- Set `stateless=false` in `new_failover()` for stateful services to maintain leader affinity
+- The client automatically handles redirects and retries based on error type
