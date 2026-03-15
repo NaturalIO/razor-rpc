@@ -1,6 +1,6 @@
 use crate::client::task::*;
 use crate::client::{
-    ClientCaller, ClientCallerBlocking, ClientConfig, ClientFacts, ClientPool, ClientTransport,
+    ClientCaller, ClientCallerBlocking, ClientConfig, ClientFacts, ClientTransport, ConnPool,
 };
 use crate::proto::RpcAction;
 use crate::{
@@ -60,7 +60,7 @@ where
     F: ClientFacts,
     P: ClientTransport,
 {
-    pools: Vec<ClientPool<FailoverFacts<F>, P>>,
+    pools: Vec<ConnPool<FailoverFacts<F>, P>>,
     ver: u64,
 }
 
@@ -82,10 +82,10 @@ where
             Arc::new(FailoverFacts { retry_limit, retry_tx, logger: facts.new_logger(), facts });
         let mut pools = Vec::with_capacity(addrs.len());
         for addr in addrs.iter() {
-            let pool = ClientPool::new::<RT>(wrapped_facts.clone(), rt, addr, pool_channel_size);
+            let pool = ConnPool::new::<RT>(wrapped_facts.clone(), rt, addr, pool_channel_size);
             pools.push(pool);
         }
-        // NOTE: the ClientPool has cycle reference with FailoverPoolInner
+        // NOTE: the ConnPool has cycle reference with FailoverPoolInner
         let inner = Arc::new(FailoverPoolInner::<F, P> {
             pools: ArcSwap::new(Arc::new(ClusterConfig { ver: 0, pools })),
             round_robin,
@@ -104,7 +104,7 @@ where
     pub fn update_addrs<RT: AsyncRuntime + Clone>(&self, addrs: Vec<String>, rt: &RT) {
         let inner = &self.inner;
         let old_pools = inner.pools.load_full();
-        let mut new_pools: Vec<ClientPool<FailoverFacts<F>, P>> = Vec::with_capacity(addrs.len());
+        let mut new_pools: Vec<ConnPool<FailoverFacts<F>, P>> = Vec::with_capacity(addrs.len());
 
         let mut old_pools_map = std::collections::HashMap::with_capacity(old_pools.pools.len());
         for pool in &old_pools.pools {
@@ -117,7 +117,7 @@ where
             } else {
                 // Create a new pool for the new address
                 let new_pool =
-                    ClientPool::new::<RT>(inner.facts.clone(), rt, &addr, inner.pool_channel_size);
+                    ConnPool::new::<RT>(inner.facts.clone(), rt, &addr, inner.pool_channel_size);
                 new_pools.push(new_pool);
             }
         }
@@ -135,7 +135,7 @@ where
     #[inline]
     fn select(
         &self, round_robin: bool, rr_counter: &AtomicUsize, last_index: Option<usize>,
-    ) -> Option<(usize, &ClientPool<FailoverFacts<F>, P>)> {
+    ) -> Option<(usize, &ConnPool<FailoverFacts<F>, P>)> {
         let l = self.pools.len();
         if l == 0 {
             return None;

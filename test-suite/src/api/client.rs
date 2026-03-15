@@ -5,7 +5,7 @@ use razor_rpc_tcp::TcpClient;
 
 pub type APIClient<C> = razor_stream::client::ClientDefault<APIClientReq, C>;
 
-pub type PoolCaller<C> = ClientPool<APIClient<C>, TcpClient<crate::RT>>;
+pub type PoolCaller<C> = ConnPool<APIClient<C>, TcpClient<crate::RT>>;
 
 pub struct MyClient<C: Codec> {
     pub cal: CalClient<PoolCaller<C>>,

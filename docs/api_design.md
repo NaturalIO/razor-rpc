@@ -10,8 +10,8 @@ Key components for the client:
 
 The following structs impl both [ClientCaller](crate::client::ClientCaller) (async) and [ClientCallerBlocking](crate::client::ClientCallerBlocking).
 
-- **[`ClientPool`](crate::client::ClientPool)**: Maintains a pool of worker connections
-- **[`FailoverPool`](crate::client::FailoverPool)**: Load balancing and failover, maintains multiple `ClientPool`
+- **[`ConnPool`](crate::client::ConnPool)**: Maintains a pool of worker connections
+- **[`FailoverPool`](crate::client::FailoverPool)**: Load balancing and failover, maintains multiple `ConnPool`
 
 **Endpoint**
 
@@ -118,7 +118,7 @@ Steps:
 6. choose request dispatch method: [crate::server::dispatch]
 7. Start listening for connection
 8. Initialize ClientFacts (with configuration, runtime, and codec)
-9. Setup a connection pool: [ClientPool](crate::client::ClientPool) or
+9. Setup a connection pool: [ConnPool](crate::client::ConnPool) or
    [FailoverPool](crate::client::FailoverPool)
 
 The code:
@@ -206,7 +206,7 @@ async fn use_client(server_addr: &str) {
     type Facts = APIClientDefault<Codec>;
     let client_facts = Facts::new(client_config);
     // 9. Create client connection pool
-    let pool: ClientPool<Facts, ClientProto> =
+    let pool: ConnPool<Facts, ClientProto> =
         client_facts.create_pool_async::<ClientProto, RT>(&rt, server_addr);
     let client = CalculatorClient::new(pool);
     //  You will have to import CalculatorService trait to call its methods

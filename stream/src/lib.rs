@@ -38,7 +38,7 @@
 //! An internal timer then registers the request through a channel, and when the response
 //! is received, it can optionally notify the user through a user-defined channel or another mechanism.
 //!
-//! [ClientPool](crate::client::ClientPool) and [FailoverPool](crate::client::FailoverPool) are provided on top of `ClientStream` for user.
+//! [ConnPool](crate::client::ConnPool) and [FailoverPool](crate::client::FailoverPool) are provided on top of `ClientStream` for user.
 //!
 //! In an [RpcServer](crate::server::RpcServer), for each connection, there is one coroutine to read requests and one
 //! coroutine to write responses. Requests can be dispatched with a user-defined

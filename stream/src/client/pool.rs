@@ -20,7 +20,7 @@ use std::time::Duration;
 /// There's a worker accepting task post in bounded channel.
 ///
 /// Even when the server address is not reachable, the worker coroutine will not exit,
-/// until ClientPool is dropped.
+/// until ConnPool is dropped.
 ///
 /// The background coroutine will:
 /// - monitor the address with ping task (action 0)
@@ -33,19 +33,19 @@ use std::time::Duration;
 /// - The task incoming might never stop until faulty pool remove from pools collection
 /// - If ping mixed with task with real business, might blocked due to throttler of in-flight
 ///   message in the stream.
-pub struct ClientPool<F: ClientFacts, P: ClientTransport> {
+pub struct ConnPool<F: ClientFacts, P: ClientTransport> {
     tx_async: MAsyncTx<mpmc::Array<F::Task>>,
     tx: MTx<mpmc::Array<F::Task>>,
-    inner: Arc<ClientPoolInner<F, P>>,
+    inner: Arc<ConnPoolInner<F, P>>,
 }
 
-impl<F: ClientFacts, P: ClientTransport> Clone for ClientPool<F, P> {
+impl<F: ClientFacts, P: ClientTransport> Clone for ConnPool<F, P> {
     fn clone(&self) -> Self {
         Self { tx_async: self.tx_async.clone(), tx: self.tx.clone(), inner: self.inner.clone() }
     }
 }
 
-struct ClientPoolInner<F: ClientFacts, P: ClientTransport> {
+struct ConnPoolInner<F: ClientFacts, P: ClientTransport> {
     facts: Arc<F>,
     logger: Arc<LogFilter>,
     rx: MAsyncRx<mpmc::Array<F::Task>>,
@@ -64,7 +64,7 @@ struct ClientPoolInner<F: ClientFacts, P: ClientTransport> {
 
 const ONE_SEC: Duration = Duration::from_secs(1);
 
-impl<F: ClientFacts, P: ClientTransport> ClientPool<F, P> {
+impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
     pub fn new<RT: AsyncRuntime + Clone>(
         facts: Arc<F>, rt: &RT, addr: &str, mut channel_size: usize,
     ) -> Self {
@@ -79,7 +79,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientPool<F, P> {
         let (tx_async, rx) = mpmc::bounded_async(channel_size);
         let tx = tx_async.clone().into();
         let conn_id = format!("to {}", addr);
-        let inner = Arc::new(ClientPoolInner {
+        let inner = Arc::new(ConnPoolInner {
             logger: facts.new_logger(),
             facts: facts.clone(),
             rx,
@@ -124,14 +124,14 @@ impl<F: ClientFacts, P: ClientTransport> ClientPool<F, P> {
     }
 }
 
-impl<F: ClientFacts, P: ClientTransport> Drop for ClientPoolInner<F, P> {
+impl<F: ClientFacts, P: ClientTransport> Drop for ConnPoolInner<F, P> {
     fn drop(&mut self) {
         self.cleanup();
         logger_trace!(self.logger, "{} dropped", self);
     }
 }
 
-impl<F: ClientFacts, P: ClientTransport> ClientCaller for ClientPool<F, P> {
+impl<F: ClientFacts, P: ClientTransport> ClientCaller for ConnPool<F, P> {
     type Facts = F;
     #[inline]
     async fn send_req(&self, task: F::Task) {
@@ -139,7 +139,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientCaller for ClientPool<F, P> {
     }
 }
 
-impl<F: ClientFacts, P: ClientTransport> ClientCallerBlocking for ClientPool<F, P> {
+impl<F: ClientFacts, P: ClientTransport> ClientCallerBlocking for ConnPool<F, P> {
     type Facts = F;
     #[inline]
     fn send_req_blocking(&self, task: F::Task) {
@@ -147,14 +147,14 @@ impl<F: ClientFacts, P: ClientTransport> ClientCallerBlocking for ClientPool<F, 
     }
 }
 
-impl<F: ClientFacts, P: ClientTransport> fmt::Display for ClientPoolInner<F, P> {
+impl<F: ClientFacts, P: ClientTransport> fmt::Display for ConnPoolInner<F, P> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ConnPool {}", self.conn_id)
     }
 }
 
-impl<F: ClientFacts, P: ClientTransport> ClientPoolInner<F, P> {
+impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
     fn spawn_worker<RT: AsyncRuntime + Clone>(self: Arc<Self>, rt: &RT, worker_id: usize) {
         let _rt = rt.clone();
         rt.spawn_detach(async move {

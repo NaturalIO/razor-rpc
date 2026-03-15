@@ -16,7 +16,7 @@ pub mod timer;
 use timer::ClientTaskTimer;
 
 mod pool;
-pub use pool::ClientPool;
+pub use pool::ConnPool;
 mod failover;
 pub use failover::FailoverPool;
 
