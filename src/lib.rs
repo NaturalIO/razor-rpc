@@ -12,8 +12,9 @@
 //!
 //! - Independent from async runtime (with plugins)
 //! - With service trait very similar to grpc / tarpc (stream in API interface is not supported currently)
-//! - Support latest `impl Future` definition of rust since 1.75, also support legacy `async_trait` wrapper
-//! - Each method can have different custom error type (requires the type implements
+//! - Support rust 1.75 `AFIT` (Async fn in Traits) `RPITIT` (Return Position Impl Trait in Traits),
+//! - Support traits wrapped with `#[async_trait::async_trait]` (Box dyn dispatch).
+//! - Each method can have **different custom error type** (requires the type implements
 //!   [RpcErrCodec](crate::error::RpcErrCodec))
 //! - based on [razor-stream](https://docs.rs/razor-stream): Full duplex in each connection, with sliding window threshold, allow maximizing throughput and lower cpu usage.
 //!

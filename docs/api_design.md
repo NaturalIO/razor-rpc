@@ -6,21 +6,20 @@ See [`client`](crate::client) module for more details.
 
 Key components for the client:
 
-**ClientCallers**
+**Connections Pool**:
 
-The following structs impl both [ClientCaller](crate::client::ClientCaller) (async) and [ClientCallerBlocking](crate::client::ClientCallerBlocking).
+The following are type alias from `razor-stream` crate:
 
-- **[`ConnPool`](crate::client::ConnPool)**: Maintains a pool of worker connections
-- **[`FailoverPool`](crate::client::FailoverPool)**: Load balancing and failover, maintains multiple `ConnPool`
+- [`APIConnPool`](crate::client::APIConnPool): Maintains a pool of worker connections
+- [`APIFailoverPool`](crate::client::APIFailoverPool): Load balancing and failover, maintains multiple `ConnPool`
 
-**APIClientCaller**
-
-- **[`APIClientCaller`](crate::client::APIClientCaller)**: This trait defines `async fn call` - implemented directly on `ConnPool` and `FailoverPool`
+We have added a helper trait [`APIClientCaller`](crate::client::APIClientCaller), which defines a helper function for a service.method call.
+This trait is used in proc-macro `#[endpoint_async]` generated  code for a service trait.
 
 **Client**
 
 Because client should defined by user to add their service method, we provide macro
-**[`endpoint_client!`](crate::client::endpoint_client)** to generates a client struct with generic, which have a new() method to wrap an APIClientCaller:
+**[`endpoint_client!`](crate::client::endpoint_client)** to generates a wrapper struct with generic over the `APIClientCaller` connection pools, which have a new() method:
 
 For example:
 
@@ -47,17 +46,16 @@ where
 }
 ```
 
-
-blocking-context is not implemented yet.
+NOTE: blocking-context is not implemented yet.
 
 ### 2. Service
 
 A Service in `razor-rpc` follows these principles:
 - Called with immutable `&self` (server-side requires `Sync`)
 - Client and server share the same trait definition for compile-time checks
-- Service methods return `Result<T, RpcError<E>>` where `E: RpcErrCodec`
-- Methods should be `async fn` or return `impl Future`
 - Compatible with GRPC naming conventions (`service` in PascalCase, `method` in snake_case)
+- Methods should be `async fn` or return `impl Future`
+- Methods can return **custom error type**. All method should return `Result<T, RpcError<E>>` where `E: RpcErrCodec`, refer to doc: [error module](crate::error). 
 
 We supports rust 1.75 `AFIT` (Async fn in Traits) `RPITIT` (Return Position Impl Trait in Traits), and legacy `#[async_trait]`.
 
@@ -100,7 +98,7 @@ There's slight cost to call method on trait object, but this is very trivial com
 
 See [`server`](crate::server) module for more details.
 
-## Example Usage
+## Example Usage (using ConnPool)
 
 Steps:
 
@@ -198,10 +196,9 @@ async fn use_client(server_addr: &str) {
     let mut client_config = ClientConfig::default();
     client_config.task_timeout = 5;
     let rt = RT::new_multi_thread(8);
-    let client_facts = APIFact::<Codec>::new(client_config);
+    let factory = APIFact::<Codec>::new(client_config);
     // 9. Create client connection pool
-    let pool: APIConnPool<Codec, ClientProto> =
-        client_facts.new_conn_pool::<ClientProto, RT>(&rt, server_addr);
+    let pool: APIConnPool<Codec, ClientProto> = factory.new_conn_pool::<ClientProto, RT>(&rt, server_addr);
     let client = CalculatorClient::new(pool);
     //  You will have to import CalculatorService trait to call its methods
     use CalculatorService;
