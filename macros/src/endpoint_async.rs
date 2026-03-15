@@ -170,15 +170,16 @@ fn generate_trait_impl(
                     if returns_impl_future {
                         quote! {
                             fn #method_name(&self, #arg_name: #arg_type) #return_type {
+                                let caller = self.caller.clone();
                                 async move {
-                                    <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &#arg_name).await
+                                    caller.call(#service_method, &#arg_name).await
                                 }
                             }
                         }
                     } else {
                         quote! {
                             async fn #method_name(&self, #arg_name: #arg_type) #return_type {
-                                <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &#arg_name).await
+                                self.caller.call(#service_method, &#arg_name).await
                             }
                         }
                     }
@@ -186,7 +187,7 @@ fn generate_trait_impl(
                     // For non-async methods, we still need to return a future
                     quote! {
                         async fn #method_name(&self, #arg_name: #arg_type) #return_type {
-                            <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &#arg_name).await
+                            self.caller.call(#service_method, &#arg_name).await
                         }
                     }
                 }
@@ -196,15 +197,16 @@ fn generate_trait_impl(
                     if returns_impl_future {
                         quote! {
                             fn #method_name(&self) #return_type {
+                                let caller = self.caller.clone();
                                 async move {
-                                    <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &()).await
+                                    caller.call(#service_method, &()).await
                                 }
                             }
                         }
                     } else {
                         quote! {
                             async fn #method_name(&self) #return_type {
-                                <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &()).await
+                                self.caller.call(#service_method, &()).await
                             }
                         }
                     }
@@ -212,7 +214,7 @@ fn generate_trait_impl(
                     // For non-async methods, we still need to return a future
                     quote! {
                         async fn #method_name(&self) #return_type {
-                            <Self as razor_rpc::client::AsyncEndpoint<C>>::call(self, #service_method, &()).await
+                            self.caller.call(#service_method, &()).await
                         }
                     }
                 }
@@ -228,11 +230,10 @@ fn generate_trait_impl(
             #[::async_trait::async_trait]
             impl<C> #trait_name for #client_name<C>
             where
-                C: razor_rpc::client::ClientCaller,
+                C: razor_rpc::client::APIClientCaller,
                 C: Clone,
                 C: Sync,
                 C: 'static,
-                C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
             {
                 #(#impl_methods)*
             }
@@ -241,11 +242,10 @@ fn generate_trait_impl(
         quote! {
             impl<C> #trait_name for #client_name<C>
             where
-                C: razor_rpc::client::ClientCaller,
+                C: razor_rpc::client::APIClientCaller,
                 C: Clone,
                 C: Sync,
                 C: 'static,
-                C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
             {
                 #(#impl_methods)*
             }

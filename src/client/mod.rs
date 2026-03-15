@@ -1,4 +1,5 @@
 pub mod task;
+use captains_log::filter::LogFilter;
 use crossfire::oneshot::oneshot;
 use crossfire::*;
 use orb::AsyncRuntime;
@@ -9,47 +10,80 @@ pub use task::*;
 use crate::Codec;
 use crate::error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr};
 pub use razor_stream::client::{
-    ClientCallerBlocking, ClientConfig, ClientFacts, ClientPool, ClientTransport, FailoverPool,
+    ClientCallerBlocking, ClientConfig, ClientFacts, ClientTransport, ConnPool, FailoverPool,
 };
 use std::fmt;
 use std::sync::Arc;
 
-pub type APIClientDefault<C> = razor_stream::client::ClientDefault<APIClientReq, C>;
+pub struct APIFact<C: Codec> {
+    pub logger: Arc<LogFilter>,
+    config: ClientConfig,
+    _phan: std::marker::PhantomData<fn(&C)>,
+}
 
-/// Optional helper trait to Provide two convenient function to crete ClientPool / FailoverPool
-///
-/// We automatically impl this trait for traits met the requirement `ClientFacts<Task = APIClientReq>`.
-/// To use it, you just have to:
-///
-/// ```
-/// use razor_rpc::client::APIClientFacts;
-/// ```
-pub trait APIClientFacts: ClientFacts<Task = APIClientReq> {
-    fn create_pool_async<T: ClientTransport, RT: AsyncRuntime + Clone>(
-        self: Arc<Self>, rt: &RT, addr: &str,
-    ) -> ClientPool<Self, T> {
-        ClientPool::new::<RT>(self.clone(), rt, addr, 0)
+pub type APIConnPool<C, P> = ConnPool<APIFact<C>, P>;
+pub type APIFailoverPool<C, P> = FailoverPool<APIFact<C>, P>;
+
+impl<C: Codec> APIFact<C> {
+    pub fn new(config: ClientConfig) -> Arc<Self> {
+        Arc::new(Self { logger: Arc::new(LogFilter::new()), config, _phan: Default::default() })
     }
 
-    fn create_failover_async<T: ClientTransport, RT: AsyncRuntime + Clone>(
+    #[inline]
+    pub fn set_log_level(&self, level: log::Level) {
+        self.logger.set_level(level);
+    }
+
+    pub fn new_conn_pool<P: ClientTransport, RT: AsyncRuntime + Clone>(
+        self: Arc<Self>, rt: &RT, addr: &str,
+    ) -> APIConnPool<C, P> {
+        ConnPool::<APIFact<C>, P>::new::<RT>(self.clone(), rt, addr, 0)
+    }
+
+    pub fn new_failover<P: ClientTransport, RT: AsyncRuntime + Clone>(
         self: Arc<Self>, rt: &RT, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
-    ) -> Arc<FailoverPool<Self, T>> {
-        Arc::new(FailoverPool::new::<RT>(self.clone(), rt, addrs, round_robin, retry_limit, 0))
+    ) -> APIFailoverPool<C, P> {
+        FailoverPool::<APIFact<C>, P>::new::<RT>(
+            self.clone(),
+            rt,
+            addrs,
+            round_robin,
+            retry_limit,
+            0,
+        )
     }
 }
 
-impl<F: ClientFacts<Task = APIClientReq>> APIClientFacts for F {}
+impl<C: Codec> ClientFacts for APIFact<C> {
+    type Codec = C;
+    type Task = APIClientReq;
 
-pub trait AsyncEndpoint<C>: AsRef<C> + Sync
-where
-    C: ClientCaller<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    fn codec(&self) -> &<C::Facts as ClientFacts>::Codec;
-
-    fn caller(&self) -> &C {
-        self.as_ref()
+    #[inline]
+    fn new_logger(&self) -> Arc<LogFilter> {
+        self.logger.clone()
     }
 
+    #[inline]
+    fn get_config(&self) -> &ClientConfig {
+        &self.config
+    }
+}
+
+pub trait APIClientCaller: ClientCaller<Facts: ClientFacts<Task = APIClientReq>> {
+    fn call<Req, Resp, E>(
+        &self, service_method: &'static str, req: &Req,
+    ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
+    where
+        Req: serde::Serialize + fmt::Debug + Send + Sync,
+        Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
+        E: RpcErrCodec;
+}
+
+impl<F, P> APIClientCaller for ConnPool<F, P>
+where
+    F: ClientFacts<Task = APIClientReq>,
+    P: ClientTransport,
+{
     fn call<Req, Resp, E>(
         &self, service_method: &'static str, req: &Req,
     ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
@@ -60,27 +94,41 @@ where
     {
         async move {
             let (tx, rx) = oneshot::<APIClientReq>();
-            let codec = self.codec();
-            <C as ClientCaller>::send_req(self.caller(), make_req(codec, service_method, req, tx))
-                .await;
-            process_res(codec, rx.recv_async().await)
+            let codec = <Self as ClientCaller>::get_codec(self);
+            self.send_req(make_req(&codec, service_method, req, tx)).await;
+            process_res(&codec, rx.recv_async().await)
         }
     }
 }
 
-// AsyncEndpoint trait is provided for user-defined clients
-// Users implement this trait on their client structs to get the call() method
-
-pub trait BlockingEndpoint<C>: AsRef<C>
+impl<F, P> APIClientCaller for FailoverPool<F, P>
 where
-    C: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
+    F: ClientFacts<Task = APIClientReq>,
+    P: ClientTransport,
 {
-    fn codec(&self) -> &<C::Facts as ClientFacts>::Codec;
-
-    fn caller(&self) -> &C {
-        self.as_ref()
+    fn call<Req, Resp, E>(
+        &self, service_method: &'static str, req: &Req,
+    ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
+    where
+        Req: serde::Serialize + fmt::Debug + Send + Sync,
+        Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
+        E: RpcErrCodec,
+    {
+        async move {
+            let (tx, rx) = oneshot::<APIClientReq>();
+            let codec = <Self as ClientCaller>::get_codec(self);
+            self.send_req(make_req(&codec, service_method, req, tx)).await;
+            process_res(&codec, rx.recv_async().await)
+        }
     }
+}
 
+/*
+ *
+BlockingEndpoint trait is provided for user-defined blocking clients
+ Users implement this trait on their client structs to get the call() method
+pub trait BlockingEndpoint: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
+{
     fn call<Req, Resp, E>(
         &self, service_method: &'static str, req: &Req,
     ) -> Result<Resp, RpcError<E>>
@@ -95,9 +143,7 @@ where
         process_res(codec, rx.recv())
     }
 }
-
-// BlockingEndpoint trait is provided for user-defined blocking clients
-// Users implement this trait on their client structs to get the call() method
+*/
 
 #[inline]
 fn make_req<C, Req>(
@@ -166,7 +212,6 @@ where
 /// ```ignore
 /// pub struct MyClient<C> {
 ///     caller: C,
-///     codec: <C::Facts as ClientFacts>::Codec,
 /// }
 ///
 /// impl_client!(MyClient);
@@ -181,7 +226,7 @@ macro_rules! impl_client {
             <C::Facts as $crate::client::ClientFacts>::Codec: Clone,
         {
             fn clone(&self) -> Self {
-                Self { caller: self.caller.clone(), codec: self.codec.clone() }
+                Self { caller: self.caller.clone() }
             }
         }
 
@@ -192,16 +237,6 @@ macro_rules! impl_client {
         {
             fn as_ref(&self) -> &C {
                 &self.caller
-            }
-        }
-
-        impl<C> $crate::client::AsyncEndpoint<C> for $client<C>
-        where
-            C: $crate::client::ClientCaller + Sync,
-            C::Facts: $crate::client::ClientFacts<Task = $crate::client::task::APIClientReq>,
-        {
-            fn codec(&self) -> &<C::Facts as $crate::client::ClientFacts>::Codec {
-                &self.codec
             }
         }
     };

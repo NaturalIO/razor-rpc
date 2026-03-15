@@ -13,17 +13,14 @@ The following structs impl both [ClientCaller](crate::client::ClientCaller) (asy
 - **[`ConnPool`](crate::client::ConnPool)**: Maintains a pool of worker connections
 - **[`FailoverPool`](crate::client::FailoverPool)**: Load balancing and failover, maintains multiple `ConnPool`
 
-**Endpoint**
+**APIClientCaller**
 
-Endpoints are helper trait for those `AsRef<ClientCaller>`
-
-- **[`AsyncEndpoint`](crate::client::AsyncEndpoint)**: This trait defines `async fn call` - a wrapper around `ClientCaller`
-- **[`BlockingEndpoint`](crate::client::BlockingEndpoint)**: This trait defines synchronous `fn call`
+- **[`APIClientCaller`](crate::client::APIClientCaller)**: This trait defines `async fn call` - implemented directly on `ConnPool` and `FailoverPool`
 
 **Client**
 
 Because client should defined by user to add their service method, we provide macro
-**[`endpoint_client!`](crate::client::endpoint_client)** to generates a client struct with generic, which have a new() method to wrap a ClientCaller:
+**[`endpoint_client!`](crate::client::endpoint_client)** to generates a client struct with generic, which have a new() method to wrap an APIClientCaller:
 
 For example:
 
@@ -35,16 +32,14 @@ Generated code:
 ```text
 pub struct #client_name<C>
 where
-    C: razor_rpc::client::ClientCaller,
-    C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>,
+    C: razor_rpc::client::APIClientCaller,
 {
-    inner: C,
+    caller: C,
 }
 
 impl<C> #client_name<C>
 where
-    C: razor_rpc::client::ClientCaller,
-    C::Facts: razor_rpc::client::ClientFacts<Task = razor_rpc::client::task::APIClientReq>
+    C: razor_rpc::client::APIClientCaller,
 {
     pub fn new(caller: C) -> Self {
         ...
@@ -124,7 +119,7 @@ Steps:
 The code:
 
 ```rust
-use razor_rpc::client::{endpoint_client, endpoint_async, APIClientReq, ClientConfig};
+use razor_rpc::client::{endpoint_client, endpoint_async, APIFact, APIConnPool, ClientConfig};
 use razor_rpc::server::{service, ServerConfig};
 use razor_rpc::error::RpcError;
 use razor_rpc_tcp::{TcpClient, TcpServer};
@@ -203,11 +198,10 @@ async fn use_client(server_addr: &str) {
     let mut client_config = ClientConfig::default();
     client_config.task_timeout = 5;
     let rt = RT::new_multi_thread(8);
-    type Facts = APIClientDefault<Codec>;
-    let client_facts = Facts::new(client_config);
+    let client_facts = APIFact::<Codec>::new(client_config);
     // 9. Create client connection pool
-    let pool: ConnPool<Facts, ClientProto> =
-        client_facts.create_pool_async::<ClientProto, RT>(&rt, server_addr);
+    let pool: APIConnPool<Codec, ClientProto> =
+        client_facts.new_conn_pool::<ClientProto, RT>(&rt, server_addr);
     let client = CalculatorClient::new(pool);
     //  You will have to import CalculatorService trait to call its methods
     use CalculatorService;

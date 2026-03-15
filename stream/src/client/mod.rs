@@ -105,6 +105,10 @@ pub trait ClientCaller: Send {
     type Facts: ClientFacts;
     fn send_req(&self, task: <Self::Facts as ClientFacts>::Task)
     -> impl Future<Output = ()> + Send;
+
+    fn get_codec(&self) -> <Self::Facts as ClientFacts>::Codec {
+        <Self::Facts as ClientFacts>::Codec::default()
+    }
 }
 
 /// A trait to support sending request task in blocking text, for all router and connection pool
@@ -112,10 +116,15 @@ pub trait ClientCaller: Send {
 pub trait ClientCallerBlocking: Send {
     type Facts: ClientFacts;
     fn send_req_blocking(&self, task: <Self::Facts as ClientFacts>::Task);
+
+    fn get_codec(&self) -> <Self::Facts as ClientFacts>::Codec {
+        <Self::Facts as ClientFacts>::Codec::default()
+    }
 }
 
 impl<C: ClientCaller + Send + Sync> ClientCaller for Arc<C> {
     type Facts = C::Facts;
+
     #[inline(always)]
     async fn send_req(&self, task: <Self::Facts as ClientFacts>::Task) {
         self.as_ref().send_req(task).await

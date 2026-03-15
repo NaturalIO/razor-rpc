@@ -1,5 +1,5 @@
-use razor_rpc::client::ClientCaller;
 use razor_rpc::client::task::APIClientReq;
+use razor_rpc::client::{APIClientCaller, ClientCaller};
 use razor_rpc::{
     Codec,
     error::{RpcError, RpcIntErr},
@@ -12,6 +12,7 @@ use razor_stream::client::task::{
 };
 use razor_stream::proto::RpcAction;
 use serde_derive::{Deserialize, Serialize};
+use std::fmt;
 use std::future::Future;
 use std::sync::{Arc, Mutex};
 
@@ -23,13 +24,14 @@ struct StoredReq {
 }
 
 // Mock Caller
+#[derive(Clone)]
 struct MockCaller {
-    stored_requests: Mutex<Vec<StoredReq>>,
+    stored_requests: Arc<Mutex<Vec<StoredReq>>>,
 }
 
 impl MockCaller {
-    fn new() -> Arc<Self> {
-        Arc::new(Self { stored_requests: Mutex::new(Vec::new()) })
+    fn new() -> Self {
+        Self { stored_requests: Arc::new(Mutex::new(Vec::new())) }
     }
 }
 
@@ -81,14 +83,65 @@ impl ClientCaller for MockCaller {
             }
             _ => unreachable!(),
         };
-
         if action.as_str() != "MyTestService.error_method" {
             task.decode_resp(&codec, &resp_buf).unwrap();
             task.set_ok();
             task.done();
         }
-
         println!("Request completed");
+    }
+}
+
+impl APIClientCaller for MockCaller {
+    fn call<Req, Resp, E>(
+        &self, service_method: &'static str, req: &Req,
+    ) -> impl Future<Output = Result<Resp, RpcError<E>>> + Send
+    where
+        Req: serde::Serialize + fmt::Debug + Send + Sync,
+        Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
+        E: razor_rpc::error::RpcErrCodec,
+    {
+        let codec = MsgpCodec::default();
+        let req_buf = codec.encode(req).expect("encode");
+        let action = service_method.to_string();
+        self.stored_requests
+            .lock()
+            .unwrap()
+            .push(StoredReq { action: action.clone(), req_msg: req_buf });
+        let resp_buf: Option<Vec<u8>> = match action.as_str() {
+            "MyTestService.add" => {
+                let resp = AddResp { c: 30 };
+                Some(codec.encode(&resp).unwrap())
+            }
+            "MyTestService.no_args" => Some(codec.encode(&()).unwrap()),
+            "MyTestService.error_method" => None, // Will return error
+            "MyFutureService.compute" => {
+                let resp = ComputeResp { result: 42 };
+                Some(codec.encode(&resp).unwrap())
+            }
+            "NoAsyncTraitService.concat" => {
+                let resp = ConcatResp { result: "HelloWorld".to_string() };
+                Some(codec.encode(&resp).unwrap())
+            }
+            "MultiServiceA.method_a" => {
+                let resp = AddResp { c: 100 };
+                Some(codec.encode(&resp).unwrap())
+            }
+            "MultiServiceB.method_b" => {
+                let resp = ComputeResp { result: 200 };
+                Some(codec.encode(&resp).unwrap())
+            }
+            _ => unreachable!(),
+        };
+        async move {
+            match resp_buf {
+                Some(buf) => match codec.decode(&buf) {
+                    Ok(resp) => Ok(resp),
+                    Err(()) => Err(RpcError::Rpc(RpcIntErr::Decode)),
+                },
+                None => Err(RpcError::Rpc(RpcIntErr::Method)),
+            }
+        }
     }
 }
 
