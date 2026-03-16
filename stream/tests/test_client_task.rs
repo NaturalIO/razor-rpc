@@ -395,7 +395,7 @@ fn test_client_task_macro_with_done() {
 
     let custom_error = Errno::EAGAIN;
     let encoded_error = custom_error.encode(&codec);
-    task_err.set_custom_error(&codec, encoded_error);
+    task_err.set_custom_error(&codec, encoded_error, 0, 0);
     task_err.done();
 
     let received_task_err = done_rx.recv().unwrap();

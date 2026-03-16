@@ -288,6 +288,59 @@ pub trait RpcErrCodec: Send + Sized + 'static + Unpin {
     ///
     /// NOTE that this method exists because rust does not have Display for ().
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result;
+
+    /// Check if this error should trigger a failover/retry and return the redirect address.
+    ///
+    /// This is used by FailoverPool to implement leader redirection for multi-node
+    /// master-slave services. When a follower node receives a write request, it can
+    /// return a redirect error with the leader's address.
+    ///
+    /// Returns:
+    /// - `Ok(Some(addr))`: Retry to the specific address
+    /// - `Ok(None)`: Retry to next available node (round-robin or leader election)
+    /// - `Err(())`: Don't retry, return error to user
+    ///
+    /// Default implementation returns `Err(())`, meaning no retry.
+    ///
+    /// # Example
+    /// ```rust
+    /// use razor_stream::{Codec, error::{RpcErrCodec, EncodedErr}};
+    ///
+    /// #[derive(Debug, Clone, PartialEq)]
+    /// pub enum MyError {
+    ///     Redirect(String),
+    ///     NotLeader,
+    ///     OtherError,
+    /// }
+    ///
+    /// impl RpcErrCodec for MyError {
+    ///     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+    ///         // ... encode implementation
+    ///         # EncodedErr::Static("error")
+    ///     }
+    ///
+    ///     fn decode<C: Codec>(_codec: &C, _buf: Result<u32, &[u8]>) -> Result<Self, ()> {
+    ///         // ... decode implementation
+    ///         # Err(())
+    ///     }
+    ///
+    ///     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    ///         std::fmt::Debug::fmt(self, f)
+    ///     }
+    ///
+    ///     fn should_failover(&self) -> Result<Option<&str>, ()> {
+    ///         match self {
+    ///             Self::Redirect(addr) => Ok(Some(addr)),
+    ///             Self::NotLeader => Ok(None),  // Retry to next node
+    ///             Self::OtherError => Err(()),  // Don't retry
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    #[inline(always)]
+    fn should_failover(&self) -> Result<Option<&str>, ()> {
+        Err(())
+    }
 }
 
 macro_rules! impl_rpc_error_for_num {

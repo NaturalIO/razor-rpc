@@ -1,18 +1,18 @@
 pub mod task;
 use captains_log::filter::LogFilter;
 use crossfire::oneshot::oneshot;
-use crossfire::*;
 use orb::AsyncRuntime;
 pub use razor_rpc_macros::{endpoint_async, endpoint_client};
 pub use razor_stream::client::ClientCaller;
 pub use task::*;
 
 use crate::Codec;
-use crate::error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr};
+use crate::error::{RpcErrCodec, RpcError, RpcIntErr};
 pub use razor_stream::client::{
     ClientCallerBlocking, ClientConfig, ClientFacts, ClientTransport, ConnPool, FailoverPool,
 };
 use std::fmt;
+use std::future::Future;
 use std::sync::Arc;
 
 pub struct APIFact<C: Codec> {
@@ -41,16 +41,9 @@ impl<C: Codec> APIFact<C> {
     }
 
     pub fn new_failover<P: ClientTransport, RT: AsyncRuntime + Clone>(
-        self: Arc<Self>, rt: &RT, addrs: Vec<String>, round_robin: bool, retry_limit: usize,
+        self: Arc<Self>, rt: &RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
     ) -> APIFailoverPool<C, P> {
-        FailoverPool::<APIFact<C>, P>::new::<RT>(
-            self.clone(),
-            rt,
-            addrs,
-            round_robin,
-            retry_limit,
-            0,
-        )
+        FailoverPool::<APIFact<C>, P>::new::<RT>(self.clone(), rt, addrs, stateless, retry_limit, 0)
     }
 }
 
@@ -72,7 +65,7 @@ impl<C: Codec> ClientFacts for APIFact<C> {
 pub trait APIClientCaller: ClientCaller<Facts: ClientFacts<Task = APIClientReq>> {
     fn call<Req, Resp, E>(
         &self, service_method: &'static str, req: &Req,
-    ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
+    ) -> impl Future<Output = Result<Resp, RpcError<E>>> + Send
     where
         Req: serde::Serialize + fmt::Debug + Send + Sync,
         Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
@@ -84,19 +77,23 @@ where
     F: ClientFacts<Task = APIClientReq>,
     P: ClientTransport,
 {
-    fn call<Req, Resp, E>(
+    async fn call<Req, Resp, E>(
         &self, service_method: &'static str, req: &Req,
-    ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
+    ) -> Result<Resp, RpcError<E>>
     where
         Req: serde::Serialize + fmt::Debug + Send + Sync,
         Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
         E: RpcErrCodec,
     {
-        async move {
-            let (tx, rx) = oneshot::<APIClientReq>();
-            let codec = <Self as ClientCaller>::get_codec(self);
-            self.send_req(make_req(&codec, service_method, req, tx)).await;
-            process_res(&codec, rx.recv_async().await)
+        let (tx, rx) = oneshot::<APIClientReq>();
+        let codec = <Self as ClientCaller>::get_codec(self);
+        let mut task = APIClientReq::new(&codec, service_method, req);
+        task.set_noti(tx);
+        self.send_req(task).await;
+        if let Ok(mut task) = rx.recv_async().await {
+            return task.process_res(&codec);
+        } else {
+            return Err(RpcIntErr::Internal.into());
         }
     }
 }
@@ -106,99 +103,68 @@ where
     F: ClientFacts<Task = APIClientReq>,
     P: ClientTransport,
 {
-    fn call<Req, Resp, E>(
+    async fn call<Req, Resp, E>(
         &self, service_method: &'static str, req: &Req,
-    ) -> impl std::future::Future<Output = Result<Resp, RpcError<E>>> + Send
+    ) -> Result<Resp, RpcError<E>>
     where
         Req: serde::Serialize + fmt::Debug + Send + Sync,
         Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
         E: RpcErrCodec,
     {
-        async move {
-            let (tx, rx) = oneshot::<APIClientReq>();
-            let codec = <Self as ClientCaller>::get_codec(self);
-            self.send_req(make_req(&codec, service_method, req, tx)).await;
-            process_res(&codec, rx.recv_async().await)
-        }
-    }
-}
-
-/*
- *
-BlockingEndpoint trait is provided for user-defined blocking clients
- Users implement this trait on their client structs to get the call() method
-pub trait BlockingEndpoint: ClientCallerBlocking<Facts: ClientFacts<Task = APIClientReq>>,
-{
-    fn call<Req, Resp, E>(
-        &self, service_method: &'static str, req: &Req,
-    ) -> Result<Resp, RpcError<E>>
-    where
-        Req: serde::Serialize + fmt::Debug,
-        Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
-        E: RpcErrCodec,
-    {
-        let (tx, rx) = oneshot::<APIClientReq>();
-        let codec = self.codec();
-        self.caller().send_req_blocking(make_req(codec, service_method, req, tx));
-        process_res(codec, rx.recv())
-    }
-}
-*/
-
-#[inline]
-fn make_req<C, Req>(
-    codec: &C, service_method: &'static str, req: &Req, done_tx: oneshot::TxOneshot<APIClientReq>,
-) -> APIClientReq
-where
-    C: Codec,
-    Req: serde::Serialize + fmt::Debug,
-{
-    let req_buf = codec.encode(req).expect("encode");
-    APIClientReq {
-        common: Default::default(),
-        req_msg: Some(req_buf),
-        action: service_method.to_string(),
-        resp: None,
-        res: None,
-        noti: Some(done_tx),
-    }
-}
-
-#[inline]
-fn process_res<C, Resp, E>(
-    codec: &C, task_res: Result<APIClientReq, crossfire::RecvError>,
-) -> Result<Resp, RpcError<E>>
-where
-    C: Codec,
-    Resp: for<'a> serde::Deserialize<'a> + Send + fmt::Debug + 'static + Default,
-    E: RpcErrCodec,
-{
-    match task_res {
-        Ok(mut task) => {
-            let res = task.res.take().unwrap();
-            match res {
-                Ok(()) => {
-                    if let Some(resp) = task.resp {
-                        match codec.decode(&resp) {
-                            Ok(resp_msg) => Ok(resp_msg),
-                            Err(()) => Err(RpcIntErr::Decode.into()),
+        let codec = <Self as ClientCaller>::get_codec(self);
+        let mut retry_count = 0;
+        let max_retries = self.get_retry_limit();
+        let mut task = APIClientReq::new(&codec, service_method, req);
+        let (tx, mut rx) = oneshot::<APIClientReq>();
+        task.set_noti(tx);
+        self.send_req(task).await;
+        loop {
+            if let Ok(mut task) = rx.recv_async().await {
+                let result = task.process_res::<_, Resp, E>(&codec);
+                match result {
+                    Ok(resp) => return Ok(resp),
+                    Err(RpcError::Rpc(e)) => {
+                        // RpcIntErr less than Method is retriable by FailoverPool internally
+                        return Err(RpcError::Rpc(e));
+                    }
+                    Err(RpcError::User(e)) => {
+                        retry_count += 1;
+                        match e.should_failover() {
+                            Ok(Some(redirect_addr)) => {
+                                if retry_count < max_retries {
+                                    // Retry to specific address
+                                    let (tx, _rx) = oneshot::<APIClientReq>();
+                                    task.set_noti(tx);
+                                    rx = _rx;
+                                    self.resubmit(
+                                        task,
+                                        Ok(redirect_addr.to_string()),
+                                        retry_count,
+                                        None,
+                                    )
+                                    .await;
+                                    continue;
+                                }
+                            }
+                            Ok(None) => {
+                                if retry_count < max_retries {
+                                    // Retry to next node
+                                    let (tx, _rx) = oneshot::<APIClientReq>();
+                                    task.set_noti(tx);
+                                    rx = _rx;
+                                    let last_index = task.last_index;
+                                    self.resubmit(task, Err(last_index), retry_count, None).await;
+                                    continue;
+                                }
+                            }
+                            Err(()) => return Err(RpcError::User(e)),
                         }
-                    } else {
-                        Ok(Resp::default())
+                        return Err(RpcError::User(e));
                     }
                 }
-                Err(EncodedErr::Rpc(e)) => Err(RpcError::Rpc(e)),
-                Err(EncodedErr::Num(n)) => match E::decode(codec, Ok(n)) {
-                    Ok(e) => Err(RpcError::User(e)),
-                    Err(()) => Err(RpcIntErr::Decode.into()),
-                },
-                Err(EncodedErr::Buf(buf)) => match E::decode(codec, Err(&buf)) {
-                    Ok(e) => Err(RpcError::User(e)),
-                    Err(()) => Err(RpcIntErr::Decode.into()),
-                },
-                _ => unreachable!(),
+            } else {
+                return Err(RpcIntErr::Internal.into());
             }
         }
-        Err(_) => Err(RpcIntErr::Internal.into()),
     }
 }

@@ -148,7 +148,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
             #enum_name::#variant_name(inner) => razor_stream::client::task::ClientTaskGetResult::get_result(inner),
         });
         set_custom_error_arms.push(quote! {
-            #enum_name::#variant_name(inner) => razor_stream::client::task::ClientTaskDone::set_custom_error(inner, codec, res),
+            #enum_name::#variant_name(inner) => razor_stream::client::task::ClientTaskDone::set_custom_error(inner, codec, res, last_index, conf_ver),
         });
         set_rpc_error_arms.push(quote! {
             #enum_name::#variant_name(inner) => razor_stream::client::task::ClientTaskDone::set_rpc_error(inner, e),
@@ -245,7 +245,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         impl #impl_generics razor_stream::client::task::ClientTaskDone for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn set_custom_error<C: razor_stream::Codec>(&mut self, codec: &C, res: razor_stream::error::EncodedErr) {
+            fn set_custom_error<C: razor_stream::Codec>(&mut self, codec: &C, res: razor_stream::error::EncodedErr, last_index: usize, conf_ver: u64) {
                 match self {
                     #(#set_custom_error_arms)*
                 }

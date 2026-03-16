@@ -78,7 +78,8 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
         let reader = self.get_stream_mut();
         match resp_head.flag {
             1 => {
-                task.set_custom_error(codec, EncodedErr::Num(resp_head.msg_len.get()));
+                // In the transport layer, we don't have routing info for last_index/conf_ver
+                task.set_custom_error(codec, EncodedErr::Num(resp_head.msg_len.get()), 0, 0);
                 facts.error_handle(task);
                 return Ok(());
             }
@@ -102,7 +103,8 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
                                 }
                             }
                         }
-                        task.set_custom_error(codec, EncodedErr::Buf(buf.clone()));
+                        // In the transport layer, we don't have routing info for last_index/conf_ver
+                        task.set_custom_error(codec, EncodedErr::Buf(buf.clone()), 0, 0);
                         facts.error_handle(task);
                         return Ok(());
                     }

@@ -64,15 +64,16 @@ pub trait ClientTaskGetResult<E: RpcErrCodec> {
     fn get_result(&self) -> Result<(), &RpcError<E>>;
 }
 
-/// How to notify from Rpc framework to user when a task is done
+/// How to get notify from Rpc framework to user when a task is done
 ///
 /// The rpc framework first call set_ok or set_xxx_error, then call done
 pub trait ClientTaskDone: Sized + 'static {
-    /// Set the result.
-    /// Called by RPC framework
-    fn set_custom_error<C: Codec>(&mut self, codec: &C, e: EncodedErr);
+    /// Set the custom error Called by RPC transport layer.
+    /// the last_index and conf_ver is for FailoverPool callback to original ClientTask
+    fn set_custom_error<C: Codec>(
+        &mut self, codec: &C, e: EncodedErr, last_index: usize, conf_ver: u64,
+    );
 
-    /// Called by RPC framework
     fn set_rpc_error(&mut self, e: RpcIntErr);
 
     fn set_ok(&mut self);
