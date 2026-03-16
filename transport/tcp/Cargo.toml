@@ -1,6 +1,6 @@
 [package]
 name = "razor-rpc-tcp"
-version = "0.5.1"
+version = "0.8.0"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
@@ -16,7 +16,7 @@ with a low-level streaming interface, and high-level remote API call interface.
 """
 
 [dependencies]
-razor-stream = {path="../../stream", version=">=0.4"}
+razor-stream = {path="../../stream", version=">=0.8"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 orb = { version="0"}
 captains-log = ">=0.15"

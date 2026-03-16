@@ -13,6 +13,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.8.0] - 2026-03-17
+
+### Added
+
+- Support define custom error type to redirect / retry, via RpcErrCodec::should_failover().
+
+- FailoverPool now support leader-follower (stateless=false), and dynamically adding new server via redirect error.
+
+### Changed
+
+- Rework api interface: Define type "APIFact" to replace "APIClientDefault" / "APIClientFacts"
+
+- Rename "ClientPool" to "ConnPool"
+
+- Change "AsyncEndpoint" trait to "APIClientCaller", which impl directly on "ConnPool" / "FailoverPool"
+
+- Rename FailoverPool argument from "round-robin" to "stateless"
+
+- ClientTaskDone::set_custom_error() add last_index & config_ver as extra param, for APIClientReq to resubmit during redirect error.
+
+- Add RT as associate type of ClientTransport, to reduce RT generic in FailoverPool / ConnPool
+
+- Add RT as associate type of ServerTransport, to reduce RT generic in RpcServer::listen
+
 ## [0.7.0] - 2026-03-14
 
 ### Changed
