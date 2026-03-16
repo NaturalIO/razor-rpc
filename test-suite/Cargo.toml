@@ -18,6 +18,7 @@ crossfire = "3.0"
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread"], optional=true }
 smol = {version = "2", optional=true }
 io-buffer = { version = "1.0.7", features = ["rand"] }
+parking_lot = "0.12"
 rstest = "0"
 nix = "0"
 async-trait = "0"
