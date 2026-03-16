@@ -12,10 +12,11 @@ use arc_swap::ArcSwap;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MTx, SendError, mpsc};
 use orb::prelude::AsyncExec;
+use parking_lot::Mutex;
 use std::fmt;
 use std::sync::{
     Arc, Weak,
-    atomic::{AtomicU64, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
 };
 
 /// A pool supports failover to multiple addresses with stateless (round-robin) or stateful (leader-based) strategy
@@ -50,7 +51,6 @@ where
 {
     pools: ArcSwap<ClusterConfig<F, P>>,
     stateless: bool,
-    ver: AtomicU64,
     /// Next node index for routing:
     /// - In stateless mode: used for round-robin selection
     /// - In stateful mode: used as the current leader index
@@ -58,6 +58,8 @@ where
     pool_channel_size: usize,
     facts: Arc<FailoverFacts<F>>,
     rt: P::RT,
+    /// Mutex to protect concurrent pool addition
+    add_pool_mutex: Mutex<()>,
 }
 
 struct ClusterConfig<F, P>
@@ -95,10 +97,10 @@ where
             pools: ArcSwap::new(Arc::new(ClusterConfig { ver: 0, pools })),
             stateless,
             facts: wrapped_facts,
-            ver: AtomicU64::new(1),
             next_node: AtomicUsize::new(0),
             pool_channel_size,
             rt: rt.clone(),
+            add_pool_mutex: Mutex::new(()),
         });
         let weak_self = Arc::downgrade(&inner);
         rt.spawn_detach(async move {
@@ -167,38 +169,68 @@ where
 
     // return pool, idx, config_ver
     fn get_or_add_addr(&self, addr: &str) -> (ConnPool<FailoverFacts<F>, P>, usize, u64) {
-        let cluster = self.inner.pools.load();
-        if let Some((pool, idx)) = cluster.get_by_addr(addr) {
-            return (pool.clone(), idx, cluster.ver);
-        } else {
-            // to add new ConnPool, we need runtime
-            todo!();
+        let inner = &self.inner;
+        // Fast path: check if address already exists
+        {
+            let cluster = inner.pools.load();
+            if let Some((pool, idx)) = cluster.get_by_addr(addr) {
+                return (pool.clone(), idx, cluster.ver);
+            }
+        }
+        {
+            // Slow path: need to add new pool, acquire lock to prevent concurrent modification
+            let _guard = self.inner.add_pool_mutex.lock();
+            // Double-check after acquiring lock (another thread might have added it)
+            let old_cluster = self.inner.pools.load_full();
+            if let Some((pool, idx)) = old_cluster.get_by_addr(addr) {
+                return (pool.clone(), idx, old_cluster.ver);
+            }
+            let mut new_cluster = Vec::with_capacity(old_cluster.pools.len() + 1);
+            // Create new pool for the address
+            let new_pool =
+                ConnPool::new(inner.facts.clone(), &inner.rt, addr, inner.pool_channel_size);
+
+            // Build new cluster config with the new pool inserted at front (index 0)
+            // New address is likely the leader, so prioritize it
+            new_cluster.push(new_pool.clone());
+            new_cluster.extend(old_cluster.pools.iter().cloned());
+            let new_ver = old_cluster.ver.wrapping_add(1);
+            drop(old_cluster);
+            let new_cluster = ClusterConfig { pools: new_cluster, ver: new_ver };
+            inner.pools.store(Arc::new(new_cluster));
+            (new_pool, 0, new_ver)
         }
     }
 
     pub fn update_addrs(&self, addrs: Vec<String>) {
         let inner = &self.inner;
-        let old_pools = inner.pools.load_full();
-        let mut new_pools: Vec<ConnPool<FailoverFacts<F>, P>> = Vec::with_capacity(addrs.len());
-
-        let mut old_pools_map = AHashMap::with_capacity(old_pools.pools.len());
-        for pool in &old_pools.pools {
-            old_pools_map.insert(pool.get_addr().to_string(), pool);
-        }
-
-        for addr in addrs {
-            if let Some(reused_pool) = old_pools_map.remove(&addr) {
-                new_pools.push(reused_pool.clone());
-            } else {
-                // Create a new pool for the new address
-                let new_pool =
-                    ConnPool::new(inner.facts.clone(), &inner.rt, &addr, inner.pool_channel_size);
-                new_pools.push(new_pool);
+        {
+            let _guard = self.inner.add_pool_mutex.lock();
+            let old_cluster = inner.pools.load_full();
+            let mut new_pools: Vec<ConnPool<FailoverFacts<F>, P>> = Vec::with_capacity(addrs.len());
+            let mut old_pools_map = AHashMap::with_capacity(old_cluster.pools.len());
+            for pool in &old_cluster.pools {
+                old_pools_map.insert(pool.get_addr().to_string(), pool);
             }
+            for addr in addrs {
+                if let Some(reused_pool) = old_pools_map.remove(&addr) {
+                    new_pools.push(reused_pool.clone());
+                } else {
+                    // Create a new pool for the new address
+                    let new_pool = ConnPool::new(
+                        inner.facts.clone(),
+                        &inner.rt,
+                        &addr,
+                        inner.pool_channel_size,
+                    );
+                    new_pools.push(new_pool);
+                }
+            }
+            let new_ver = old_cluster.ver.wrapping_add(1);
+            drop(old_cluster);
+            let new_cluster = ClusterConfig { pools: new_pools, ver: new_ver };
+            inner.pools.store(Arc::new(new_cluster));
         }
-        let new_ver = inner.ver.fetch_add(1, Ordering::Relaxed) + 1;
-        let new_cluster = ClusterConfig { pools: new_pools, ver: new_ver };
-        inner.pools.store(Arc::new(new_cluster));
     }
 }
 
