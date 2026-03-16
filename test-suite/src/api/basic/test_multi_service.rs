@@ -38,7 +38,7 @@ pub type PoolCaller = APIConnPool<MsgpCodec, TcpClient<crate::RT>>;
 impl MyClient<PoolCaller> {
     pub fn new_client(config: ClientConfig, addr: &str, rt: &crate::RT) -> Self {
         let facts = APIFact::<MsgpCodec>::new(config);
-        let pool = facts.new_conn_pool::<TcpClient<crate::RT>, crate::RT>(rt, addr);
+        let pool = facts.new_conn_pool::<TcpClient<crate::RT>>(rt, addr);
         MyClient::new(pool)
     }
 }

@@ -55,7 +55,7 @@ A Service in `razor-rpc` follows these principles:
 - Client and server share the same trait definition for compile-time checks
 - Compatible with GRPC naming conventions (`service` in PascalCase, `method` in snake_case)
 - Methods should be `async fn` or return `impl Future`
-- Methods can return **custom error type**. All method should return `Result<T, RpcError<E>>` where `E: RpcErrCodec`, refer to doc: [error module](crate::error). 
+- Methods can return **custom error type**. All method should return `Result<T, RpcError<E>>` where `E: RpcErrCodec`, refer to doc: [error module](crate::error).
 
 We supports rust 1.75 `AFIT` (Async fn in Traits) `RPITIT` (Return Position Impl Trait in Traits), and legacy `#[async_trait]`.
 
@@ -198,7 +198,7 @@ async fn use_client(server_addr: &str) {
     let rt = RT::new_multi_thread(8);
     let factory = APIFact::<Codec>::new(client_config);
     // 9. Create client connection pool
-    let pool: APIConnPool<Codec, ClientProto> = factory.new_conn_pool::<ClientProto, RT>(&rt, server_addr);
+    let pool: APIConnPool<Codec, ClientProto> = factory.new_conn_pool::<ClientProto>(&rt, server_addr);
     let client = CalculatorClient::new(pool);
     //  You will have to import CalculatorService trait to call its methods
     use CalculatorService;
@@ -282,9 +282,9 @@ endpoint_client!(KVClient);
 #[endpoint_async(KVClient)]
 pub trait KVService {
     // Note: endpoint_async macro requires exactly one parameter besides &self
-    fn put(&self, kv: (String, String)) 
+    fn put(&self, kv: (String, String))
         -> impl Future<Output = Result<(), RpcError<ClusterErr>>> + Send;
-    fn get(&self, key: String) 
+    fn get(&self, key: String)
         -> impl Future<Output = Result<Option<String>, RpcError<String>>> + Send;
 }
 
@@ -295,13 +295,13 @@ type FailoverCaller = razor_rpc::client::APIFailoverPool<Codec, TcpClient<RT>>;
 
 impl KVClient<FailoverCaller> {
     pub fn new_cluster_client(
-        config: ClientConfig, 
-        addrs: Vec<String>, 
+        config: ClientConfig,
+        addrs: Vec<String>,
         rt: &RT
     ) -> Self {
         let fact = APIFact::<Codec>::new(config);
         // stateless=false: maintain leader affinity for stateful service
-        let pool = fact.new_failover::<TcpClient<RT>, RT>(rt, addrs, false, 3);
+        let pool = fact.new_failover::<TcpClient<RT>>(rt, addrs, false, 3);
         KVClient::new(pool)
     }
 }
@@ -315,12 +315,12 @@ async fn example() {
         "127.0.0.1:8081".to_string(),
         "127.0.0.1:8082".to_string(),
     ];
-    
+
     let client = KVClient::new_cluster_client(config, addrs, &rt);
-    
+
     // Write goes to leader (with automatic redirect if needed)
     client.put(("key1".to_string(), "value1".to_string())).await.unwrap();
-    
+
     // Read can go to any node
     let value = client.get("key1".to_string()).await.unwrap();
 }

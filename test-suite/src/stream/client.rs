@@ -165,7 +165,7 @@ pub async fn init_failover_client(
     // since client may be drop by test logic, it's not allow
     // to drop a tokio runtime inside async code.
     let facts = MyClient::new(config);
-    FailoverPool::new::<crate::RT>(
+    FailoverPool::new(
         facts,
         rt,
         addrs,

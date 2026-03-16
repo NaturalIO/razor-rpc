@@ -3,6 +3,7 @@
 use crate::{Codec, error::RpcIntErr};
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, mpsc};
+use orb::AsyncRuntime;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -146,6 +147,8 @@ impl<C: ClientCallerBlocking + Send + Sync> ClientCallerBlocking for Arc<C> {
 ///
 /// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
 pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
+    type RT: AsyncRuntime + Clone;
+
     /// How to establish an async connection.
     ///
     /// conn_id: used for log fmt, can by the same of addr.

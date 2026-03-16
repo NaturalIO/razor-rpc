@@ -11,7 +11,7 @@ use ahash::AHashMap;
 use arc_swap::ArcSwap;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MTx, SendError, mpsc};
-use orb::AsyncRuntime;
+use orb::prelude::AsyncExec;
 use std::fmt;
 use std::sync::{
     Arc, Weak,
@@ -57,6 +57,7 @@ where
     next_node: AtomicUsize,
     pool_channel_size: usize,
     facts: Arc<FailoverFacts<F>>,
+    rt: P::RT,
 }
 
 struct ClusterConfig<F, P>
@@ -76,8 +77,8 @@ where
     /// Initiate the pool with multiple addresses.
     /// When stateless == true, all addresses in the pool will be selected with equal chance (round-robin);
     /// When stateless == false, the leader address will always be picked unless error happens.
-    pub fn new<RT: AsyncRuntime + Clone>(
-        facts: Arc<F>, rt: &RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
+    pub fn new(
+        facts: Arc<F>, rt: &P::RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
         pool_channel_size: usize,
     ) -> Self {
         let (retry_tx, retry_rx) = mpsc::unbounded_async();
@@ -86,7 +87,7 @@ where
             Arc::new(FailoverFacts { retry_limit, retry_tx, logger: facts.new_logger(), facts });
         let mut pools = Vec::with_capacity(addrs.len());
         for addr in addrs.iter() {
-            let pool = ConnPool::new::<RT>(wrapped_facts.clone(), rt, addr, pool_channel_size);
+            let pool = ConnPool::new(wrapped_facts.clone(), rt, addr, pool_channel_size);
             pools.push(pool);
         }
         // NOTE: the ConnPool has cycle reference with FailoverPoolInner
@@ -97,6 +98,7 @@ where
             ver: AtomicU64::new(1),
             next_node: AtomicUsize::new(0),
             pool_channel_size,
+            rt: rt.clone(),
         });
         let weak_self = Arc::downgrade(&inner);
         rt.spawn_detach(async move {
@@ -174,7 +176,7 @@ where
         }
     }
 
-    pub fn update_addrs<RT: AsyncRuntime + Clone>(&self, addrs: Vec<String>, rt: &RT) {
+    pub fn update_addrs(&self, addrs: Vec<String>) {
         let inner = &self.inner;
         let old_pools = inner.pools.load_full();
         let mut new_pools: Vec<ConnPool<FailoverFacts<F>, P>> = Vec::with_capacity(addrs.len());
@@ -190,7 +192,7 @@ where
             } else {
                 // Create a new pool for the new address
                 let new_pool =
-                    ConnPool::new::<RT>(inner.facts.clone(), rt, &addr, inner.pool_channel_size);
+                    ConnPool::new(inner.facts.clone(), &inner.rt, &addr, inner.pool_channel_size);
                 new_pools.push(new_pool);
             }
         }

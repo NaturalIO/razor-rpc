@@ -5,7 +5,7 @@ use crate::client::{
 use crate::error::RpcIntErr;
 use captains_log::filter::LogFilter;
 use crossfire::{MAsyncRx, MAsyncTx, MTx, RecvTimeoutError, mpmc};
-use orb::AsyncRuntime;
+use orb::prelude::{AsyncExec, AsyncTime};
 use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -65,9 +65,7 @@ struct ConnPoolInner<F: ClientFacts, P: ClientTransport> {
 const ONE_SEC: Duration = Duration::from_secs(1);
 
 impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
-    pub fn new<RT: AsyncRuntime + Clone>(
-        facts: Arc<F>, rt: &RT, addr: &str, mut channel_size: usize,
-    ) -> Self {
+    pub fn new(facts: Arc<F>, rt: &P::RT, addr: &str, mut channel_size: usize) -> Self {
         let config = facts.get_config();
         if config.thresholds > 0 {
             if channel_size < config.thresholds {
@@ -91,7 +89,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
             _phan: Default::default(),
         });
         let s = Self { tx_async, tx, inner };
-        s.spawn::<RT>(rt);
+        s.spawn(rt);
         s
     }
 
@@ -118,7 +116,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
     /// by default there's one worker thread after initiation, but you can pre-spawn more thread if
     /// the connection is not enough to achieve desired throughput.
     #[inline]
-    pub fn spawn<RT: AsyncRuntime + Clone>(&self, rt: &RT) {
+    pub fn spawn(&self, rt: &P::RT) {
         let worker_id = self.inner.worker_count.fetch_add(1, Acquire);
         self.inner.clone().spawn_worker(rt, worker_id);
     }
@@ -155,7 +153,7 @@ impl<F: ClientFacts, P: ClientTransport> fmt::Display for ConnPoolInner<F, P> {
 }
 
 impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
-    fn spawn_worker<RT: AsyncRuntime + Clone>(self: Arc<Self>, rt: &RT, worker_id: usize) {
+    fn spawn_worker(self: Arc<Self>, rt: &P::RT, worker_id: usize) {
         let _rt = rt.clone();
         rt.spawn_detach(async move {
             logger_trace!(&self.logger, "{} worker_id={} running", self, worker_id);
@@ -181,7 +179,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
     }
 
     #[inline]
-    async fn connect<RT: AsyncRuntime>(&self, rt: &RT) -> Result<ClientStream<F, P>, RpcIntErr> {
+    async fn connect(&self, rt: &P::RT) -> Result<ClientStream<F, P>, RpcIntErr> {
         ClientStream::connect(self.facts.clone(), rt, &self.addr, &self.conn_id, None).await
     }
 
@@ -220,23 +218,27 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
     /// connection attempts happens after we spawn.
     /// If the address is dead, the thread might exit after multiple attempts, and later re-spawn
     /// when the needs arrives.
-    async fn run<RT: AsyncRuntime + Clone>(self: &Arc<Self>, rt: RT, mut worker_id: usize) {
+    async fn run(self: &Arc<Self>, rt: P::RT, mut worker_id: usize) {
         'CONN_LOOP: loop {
-            match self.connect::<RT>(&rt).await {
+            match self.connect(&rt).await {
                 Ok(mut stream) => {
                     logger_trace!(self.logger, "{} worker={} connected", self, worker_id);
                     if worker_id == 0 {
                         // act as monitor
                         'MONITOR: loop {
                             if self.get_workers() > 1 {
-                                RT::sleep(ONE_SEC).await;
+                                <P::RT as AsyncTime>::sleep(ONE_SEC).await;
                                 if stream.ping().await.is_err() {
                                     self.set_err();
                                     // don't cleanup the channel unless only one worker left
                                     continue 'CONN_LOOP;
                                 }
                             } else {
-                                match self.rx.recv_with_timer(RT::sleep(ONE_SEC)).await {
+                                match self
+                                    .rx
+                                    .recv_with_timer(<P::RT as AsyncTime>::sleep(ONE_SEC))
+                                    .await
+                                {
                                     Err(RecvTimeoutError::Disconnected) => {
                                         return;
                                     }
@@ -258,13 +260,13 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
                                             // there's might be a lag to connect,
                                             // so we are spawning identity with new worker,
                                             worker_id = 1;
-                                            self.clone().spawn_worker::<RT>(&rt, 0);
+                                            self.clone().spawn_worker(&rt, 0);
                                         }
                                         if stream.send_task(task, true).await.is_err() {
                                             self.set_err();
                                             if worker_id == 0 {
                                                 self.cleanup();
-                                                RT::sleep(ONE_SEC).await;
+                                                <P::RT as AsyncTime>::sleep(ONE_SEC).await;
                                                 continue 'CONN_LOOP;
                                             } else {
                                                 return;
@@ -297,7 +299,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
                     self.set_err();
                     error!("connect failed to {}: {}", self.addr, e);
                     self.cleanup();
-                    RT::sleep(ONE_SEC).await;
+                    <P::RT as AsyncTime>::sleep(ONE_SEC).await;
                 }
             }
         }

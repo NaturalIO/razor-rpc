@@ -1,7 +1,6 @@
 pub mod task;
 use captains_log::filter::LogFilter;
 use crossfire::oneshot::oneshot;
-use orb::AsyncRuntime;
 pub use razor_rpc_macros::{endpoint_async, endpoint_client};
 pub use razor_stream::client::ClientCaller;
 pub use task::*;
@@ -34,16 +33,16 @@ impl<C: Codec> APIFact<C> {
         self.logger.set_level(level);
     }
 
-    pub fn new_conn_pool<P: ClientTransport, RT: AsyncRuntime + Clone>(
-        self: Arc<Self>, rt: &RT, addr: &str,
+    pub fn new_conn_pool<P: ClientTransport>(
+        self: Arc<Self>, rt: &P::RT, addr: &str,
     ) -> APIConnPool<C, P> {
-        ConnPool::<APIFact<C>, P>::new::<RT>(self.clone(), rt, addr, 0)
+        ConnPool::<APIFact<C>, P>::new(self.clone(), rt, addr, 0)
     }
 
-    pub fn new_failover<P: ClientTransport, RT: AsyncRuntime + Clone>(
-        self: Arc<Self>, rt: &RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
+    pub fn new_failover<P: ClientTransport>(
+        self: Arc<Self>, rt: &P::RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
     ) -> APIFailoverPool<C, P> {
-        FailoverPool::<APIFact<C>, P>::new::<RT>(self.clone(), rt, addrs, stateless, retry_limit, 0)
+        FailoverPool::<APIFact<C>, P>::new(self.clone(), rt, addrs, stateless, retry_limit, 0)
     }
 }
 
