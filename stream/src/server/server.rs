@@ -2,7 +2,7 @@ use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MAsyncRx, mpmc, mpsc, null::CloseHandle};
-use orb::prelude::{AsyncRuntime, AsyncTime};
+use orb::prelude::AsyncTime;
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -39,10 +39,10 @@ where
         }
     }
 
-    pub async fn listen<RT: AsyncRuntime + Clone, T: ServerTransport, D: Dispatch>(
-        &mut self, rt: RT, addr: &str, dispatch: D,
+    pub async fn listen<P: ServerTransport, D: Dispatch>(
+        &mut self, rt: P::RT, addr: &str, dispatch: D,
     ) -> io::Result<String> {
-        match T::bind(addr).await {
+        match P::bind(addr).await {
             Err(e) => {
                 error!("bind addr {:?} err: {}", addr, e);
                 return Err(e);
@@ -74,8 +74,8 @@ where
                             }
                             Ok(stream) => {
                                 let conn =
-                                    T::new_conn(stream, facts.get_config(), conn_ref_count.clone());
-                                Self::server_conn::<RT, T, D>(
+                                    P::new_conn(stream, facts.get_config(), conn_ref_count.clone());
+                                Self::server_conn::<P, D>(
                                     &_rt,
                                     conn,
                                     &facts,
@@ -92,8 +92,8 @@ where
         }
     }
 
-    fn server_conn<RT: AsyncRuntime + Clone, T: ServerTransport, D: Dispatch>(
-        rt: &RT, conn: T, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
+    fn server_conn<P: ServerTransport, D: Dispatch>(
+        rt: &P::RT, conn: P, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
     ) {
         let conn = Arc::new(conn);
 
@@ -101,15 +101,15 @@ where
         let codec = Arc::new(D::Codec::default());
 
         let noti = RespNoti(done_tx);
-        struct Reader<T: ServerTransport, D: Dispatch> {
+        struct Reader<P: ServerTransport, D: Dispatch> {
             noti: RespNoti<D::RespTask>,
-            conn: Arc<T>,
+            conn: Arc<P>,
             server_close_rx: MAsyncRx<mpmc::Null>,
             codec: Arc<D::Codec>,
             dispatch: D,
             logger: Arc<LogFilter>,
         }
-        let reader = Reader::<T, D> {
+        let reader = Reader::<P, D> {
             noti,
             codec: codec.clone(),
             dispatch,
@@ -119,7 +119,7 @@ where
         };
         rt.spawn_detach(async move { reader.run().await });
 
-        impl<T: ServerTransport, D: Dispatch> Reader<T, D> {
+        impl<P: ServerTransport, D: Dispatch> Reader<P, D> {
             async fn run(self) -> Result<(), ()> {
                 loop {
                     match self.conn.read_req(&self.logger, &self.server_close_rx).await {
@@ -157,16 +157,16 @@ where
             }
         }
 
-        struct Writer<T: ServerTransport, D: Dispatch> {
+        struct Writer<P: ServerTransport, D: Dispatch> {
             codec: Arc<D::Codec>,
             done_rx: AsyncRx<mpsc::List<Result<D::RespTask, (u64, Option<RpcIntErr>)>>>,
-            conn: Arc<T>,
+            conn: Arc<P>,
             logger: Arc<LogFilter>,
         }
-        let writer = Writer::<T, D> { done_rx, codec, conn, logger: facts.new_logger() };
+        let writer = Writer::<P, D> { done_rx, codec, conn, logger: facts.new_logger() };
         rt.spawn_detach(async move { writer.run().await });
 
-        impl<T: ServerTransport, D: Dispatch> Writer<T, D> {
+        impl<P: ServerTransport, D: Dispatch> Writer<P, D> {
             async fn run(self) -> Result<(), io::Error> {
                 macro_rules! process {
                     ($task: expr) => {{

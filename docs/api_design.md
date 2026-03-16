@@ -186,7 +186,7 @@ async fn setup_server() -> std::io::Result<String> {
     use razor_rpc::server::dispatch::Inline;
     let disp = Inline::<Codec, _>::new(CalculatorServer);
     // 7. Start listening
-    let actual_addr = server.listen::<RT, ServerProto, _>(rt, "127.0.0.1:8082", disp).await?;
+    let actual_addr = server.listen::<ServerProto, _>(rt, "127.0.0.1:8082", disp).await?;
     Ok(actual_addr)
 }
 

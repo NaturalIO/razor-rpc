@@ -62,7 +62,8 @@ impl<RT: AsyncRuntime> fmt::Debug for TcpServer<RT> {
     }
 }
 
-impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
+impl<RT: AsyncRuntime + Clone> ServerTransport for TcpServer<RT> {
+    type RT = RT;
     type Listener = UnifyListener<RT>;
 
     async fn bind(addr: &str) -> io::Result<Self::Listener> {

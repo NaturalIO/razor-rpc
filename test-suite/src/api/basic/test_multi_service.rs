@@ -170,11 +170,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
             "service_mux_dyn" => {
                 let dispatch = create_service_mux_dispatch(cal_server, echo_server);
                 let actual_addr = server
-                    .listen::<crate::RT, TcpServer<crate::RT>, _>(
-                        rt.clone(),
-                        &server_bind_addr,
-                        dispatch,
-                    )
+                    .listen::<TcpServer<crate::RT>, _>(rt.clone(), &server_bind_addr, dispatch)
                     .await
                     .expect("server listen");
                 (server, actual_addr)
@@ -182,11 +178,7 @@ fn test_api_remote_calls(runner: TestRunner, #[case] is_tcp: bool, #[case] dispa
             "service_mux_struct" => {
                 let dispatch = create_service_mux_struct_dispatch(cal_server, echo_server);
                 let actual_addr = server
-                    .listen::<crate::RT, TcpServer<crate::RT>, _>(
-                        rt.clone(),
-                        &server_bind_addr,
-                        dispatch,
-                    )
+                    .listen::<TcpServer<crate::RT>, _>(rt.clone(), &server_bind_addr, dispatch)
                     .await
                     .expect("server listen");
                 (server, actual_addr)

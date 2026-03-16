@@ -23,8 +23,7 @@ where
     // to drop a tokio runtime inside async code.
     let mut server = init_server(config);
     let dispatch = new_closure_dispatcher(server_handle);
-    let local_addr =
-        server.listen::<crate::RT, TcpServer<crate::RT>, _>(rt.clone(), addr, dispatch).await?;
+    let local_addr = server.listen::<TcpServer<crate::RT>, _>(rt.clone(), addr, dispatch).await?;
     Ok((server, local_addr))
 }
 
