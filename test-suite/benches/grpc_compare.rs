@@ -266,12 +266,112 @@ mod volo_bench {
         include!(concat!(env!("OUT_DIR"), "/volo_benchmark.rs"));
     }
 
+    use benchmark::volo_benchmark::benchmark::{
+        BenchmarkService, BenchmarkServiceClientBuilder, BenchmarkServiceServer, EchoRequest,
+        EchoResponse,
+    };
+
+    #[derive(Clone)]
+    pub struct BenchmarkServiceImpl;
+
+    impl BenchmarkService for BenchmarkServiceImpl {
+        async fn echo(
+            &self, req: volo_grpc::Request<EchoRequest>,
+        ) -> Result<volo_grpc::Response<EchoResponse>, volo_grpc::Status> {
+            let resp = EchoResponse { message: req.into_inner().message };
+            Ok(volo_grpc::Response::new(resp))
+        }
+
+        async fn add(
+            &self, _req: volo_grpc::Request<benchmark::volo_benchmark::benchmark::AddRequest>,
+        ) -> Result<
+            volo_grpc::Response<benchmark::volo_benchmark::benchmark::AddResponse>,
+            volo_grpc::Status,
+        > {
+            unimplemented!()
+        }
+
+        async fn get_user(
+            &self, _req: volo_grpc::Request<benchmark::volo_benchmark::benchmark::GetUserRequest>,
+        ) -> Result<
+            volo_grpc::Response<benchmark::volo_benchmark::benchmark::User>,
+            volo_grpc::Status,
+        > {
+            unimplemented!()
+        }
+    }
+
+    pub async fn start_server() -> (std::net::SocketAddr, tokio::sync::oneshot::Sender<()>) {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 0));
+
+        let service = BenchmarkServiceImpl;
+        let server =
+            volo_grpc::server::Server::new().add_service(BenchmarkServiceServer::new(service));
+
+        tokio::spawn(async move {
+            let addr = volo::net::Address::from(addr);
+            let _ = server
+                .run_with_shutdown(addr, async {
+                    rx.await.ok();
+                    Ok::<(), std::io::Error>(())
+                })
+                .await;
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        (addr, tx)
+    }
+
     pub fn run_volo_echo_benchmark(
-        _rt: &Runtime, _concurrency: usize, _requests_per_client: usize, _payload_size: usize,
+        rt: &Runtime, concurrency: usize, requests_per_client: usize, payload_size: usize,
     ) -> Duration {
-        // Volo benchmark temporarily disabled due to API complexity
-        // TODO: Implement proper volo server/client setup
-        Duration::from_secs(0)
+        rt.block_on(async {
+            let (addr, _shutdown_tx) = start_server().await;
+            let payload = ::pilota::FastStr::from("x".repeat(payload_size));
+
+            // Pre-create all clients
+            let mut clients = vec![];
+            for _ in 0..concurrency {
+                let client = BenchmarkServiceClientBuilder::new("benchmark.BenchmarkService")
+                    .address(volo::net::Address::from(addr))
+                    .build();
+                clients.push(client);
+            }
+
+            // Warmup
+            for client in &mut clients {
+                for _ in 0..10 {
+                    let req = EchoRequest { message: payload.clone() };
+                    let _ = client.echo(volo_grpc::Request::new(req)).await;
+                }
+            }
+
+            let semaphore = Arc::new(Semaphore::new(concurrency));
+            let payload = Arc::new(payload);
+            let start = std::time::Instant::now();
+
+            let mut handles = vec![];
+            for mut client in clients {
+                let permit = semaphore.clone().acquire_owned().await.unwrap();
+                let payload = payload.clone();
+
+                let handle = tokio::spawn(async move {
+                    for _ in 0..requests_per_client {
+                        let req = EchoRequest { message: payload.as_ref().clone() };
+                        let _ = client.echo(volo_grpc::Request::new(req)).await;
+                    }
+                    drop(permit);
+                });
+                handles.push(handle);
+            }
+
+            for handle in handles {
+                let _ = handle.await;
+            }
+
+            start.elapsed()
+        })
     }
 }
 
