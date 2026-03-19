@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package benchmark;
+
+service BenchmarkService {
+  rpc Echo (EchoRequest) returns (EchoResponse);
+  rpc Add (AddRequest) returns (AddResponse);
+  rpc GetUser (GetUserRequest) returns (User);
+}
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoResponse {
+  string message = 1;
+}
+
+message AddRequest {
+  int32 a = 1;
+  int32 b = 2;
+}
+
+message AddResponse {
+  int32 result = 1;
+}
+
+message GetUserRequest {
+  int64 user_id = 1;
+}
+
+message User {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  int32 age = 4;
+  string address = 5;
+}
