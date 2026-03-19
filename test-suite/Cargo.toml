@@ -32,16 +32,25 @@ tonic = { version = "0.12", optional = true }
 prost = { version = "0.13", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 
+# Volo gRPC dependencies
+volo = { version = "0.12.2", optional = true }
+volo-grpc = { version = "0.12.2", optional = true }
+pilota = { version = "0.13.0", optional = true }
+metainfo = { version = "0.7", optional = true }
+
 # Benchmark framework
-criterion = { version = "0.8", features = ["async_tokio"], optional = true }
+criterion = { version = "0.8", features = ["async_tokio"] }
 
 [build-dependencies]
 tonic-build = { version = "0.12", optional = true }
+volo-build = { version = "0.12.2", optional = true }
 
 [dev-dependencies]
 
 [features]
 default = ["smol"]
-tokio = ["dep:tokio", "dep:orb-tokio", "dep:tonic", "dep:prost", "dep:tokio-stream", "dep:criterion", "dep:tonic-build"]
+tokio = ["dep:tokio", "dep:orb-tokio"]
+grpc = ["tokio", "dep:tonic", "dep:prost", "dep:tokio-stream", "dep:tonic-build"]
+volo = ["tokio", "dep:volo", "dep:volo-grpc", "dep:pilota", "dep:volo-build", "dep:metainfo"]
 smol = ["dep:smol", "dep:orb-smol"]
 

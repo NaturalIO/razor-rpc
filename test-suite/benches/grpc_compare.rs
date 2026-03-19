@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::time::Duration;
 
-#[cfg(feature = "tokio")]
+#[cfg(feature = "grpc")]
 mod grpc_bench {
     use std::net::SocketAddr;
     use std::sync::Arc;
@@ -249,7 +249,33 @@ mod razor_bench {
     }
 }
 
-#[cfg(feature = "tokio")]
+#[cfg(not(any(feature = "grpc", feature = "volo")))]
+fn bench_echo_compare(_c: &mut Criterion) {
+    // No-op when grpc/volo features are not enabled
+}
+
+#[cfg(feature = "volo")]
+mod volo_bench {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::runtime::Runtime;
+    use tokio::sync::Semaphore;
+
+    // Include generated code from volo-build
+    pub mod benchmark {
+        include!(concat!(env!("OUT_DIR"), "/volo_benchmark.rs"));
+    }
+
+    pub fn run_volo_echo_benchmark(
+        _rt: &Runtime, _concurrency: usize, _requests_per_client: usize, _payload_size: usize,
+    ) -> Duration {
+        // Volo benchmark temporarily disabled due to API complexity
+        // TODO: Implement proper volo server/client setup
+        Duration::from_secs(0)
+    }
+}
+
+#[cfg(all(feature = "grpc", feature = "volo"))]
 fn bench_echo_compare(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -265,6 +291,18 @@ fn bench_echo_compare(c: &mut Criterion) {
     group.bench_function("grpc", |b| {
         b.iter(|| {
             let duration = grpc_bench::run_grpc_echo_benchmark(
+                &rt,
+                concurrency,
+                requests_per_client,
+                payload_size,
+            );
+            duration
+        });
+    });
+
+    group.bench_function("volo_grpc", |b| {
+        b.iter(|| {
+            let duration = volo_bench::run_volo_echo_benchmark(
                 &rt,
                 concurrency,
                 requests_per_client,

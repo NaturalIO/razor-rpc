@@ -1,6 +1,6 @@
 # Benchmark Tests
 
-This directory contains benchmark tests comparing razor-rpc performance with gRPC.
+This directory contains benchmark tests comparing razor-rpc performance with gRPC (tonic) and volo-grpc.
 
 ## Prerequisites
 
@@ -14,16 +14,22 @@ sudo apt install -y protobuf-compiler
 
 ## Running Benchmarks
 
-### Run all benchmarks
+### Run gRPC and razor-rpc comparison
 
 ```bash
-cargo bench -p razor-rpc-test --features tokio
+cargo bench -p razor-rpc-test --features "tokio grpc"
+```
+
+### Run all benchmarks (including volo)
+
+```bash
+cargo bench -p razor-rpc-test --features "tokio grpc volo"
 ```
 
 ### Run specific benchmark
 
 ```bash
-cargo bench -p razor-rpc-test --features tokio -- echo_1kb
+cargo bench -p razor-rpc-test --features "tokio grpc" -- echo_1kb
 ```
 
 ## Benchmark Scenarios
@@ -31,7 +37,8 @@ cargo bench -p razor-rpc-test --features tokio -- echo_1kb
 ### echo_1kb
 
 Compares echo service performance with 1KB payload:
-- **gRPC**: Uses tonic with HTTP/2 transport
+- **gRPC (tonic)**: Uses tonic with HTTP/2 transport
+- **volo-grpc**: Uses volo framework (currently stub implementation)
 - **razor-rpc**: Uses msgpack codec with TCP transport
 
 Default configuration:
@@ -58,7 +65,12 @@ After running benchmarks, you can view detailed results:
 target/criterion/
 ├── echo_1kb/
 │   ├── grpc/
+│   ├── volo_grpc/
 │   └── razor_rpc/
 ```
 
 Open the HTML reports in your browser for visualizations.
+
+## Known Issues
+
+- **volo-grpc**: Currently has a stub implementation that returns immediately. Full implementation requires more complex setup due to volo's API complexity.
