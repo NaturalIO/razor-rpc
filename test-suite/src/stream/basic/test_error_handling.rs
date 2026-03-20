@@ -13,8 +13,6 @@ use razor_stream::server::{ServerConfig, task::ServerTaskDone};
 fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
     let client_config = ClientConfig::default();
     let server_config = ServerConfig::default();
-    let rt_server = runner.rt.clone();
-    let rt = runner.rt.clone();
 
     let dispatch_task = move |task: FileServerTask| {
         async move {
@@ -37,18 +35,13 @@ fn test_server_returns_error(runner: TestRunner, #[case] is_tcp: bool) {
 
     runner.block_on(async move {
         let server_bind_addr = if is_tcp { "127.0.0.1:0" } else { "/tmp/razor-rpc-test-socket" };
-        let (_server, actual_server_addr) = init_server_closure(
-            dispatch_task,
-            server_config.clone(),
-            &server_bind_addr,
-            &rt_server,
-        )
-        .await
-        .expect("server listen");
+        let (_server, actual_server_addr) =
+            init_server_closure(dispatch_task, server_config.clone(), &server_bind_addr)
+                .await
+                .expect("server listen");
         debug!("client addr {:?}", actual_server_addr);
-        let mut client = init_client(client_config, &actual_server_addr, None, &rt)
-            .await
-            .expect("connect client");
+        let mut client =
+            init_client(client_config, &actual_server_addr, None).await.expect("connect client");
 
         // Test Open task that should fail
         let (tx, rx) = mpsc::unbounded_async();

@@ -8,7 +8,7 @@ serde_derive = "1"
 razor-stream = {path="../stream/", version="0"}
 orb = { version = "0" }
 orb-tokio = { version = "0", optional=true}
-orb-smol = { version = "0", features=["global"], optional=true}
+orb-smol = { version = "0", optional=true}
 razor-rpc-tcp = {path="../transport/tcp", version="0"}
 razor-rpc-codec = {path="../codec", version="0", features=["msgpack"]}
 razor-rpc = {path="../", version="0"}

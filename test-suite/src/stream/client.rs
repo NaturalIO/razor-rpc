@@ -15,10 +15,10 @@ pub type MyClient = ClientDefault<FileClientTask, MsgpCodec>;
 pub type FileClient = ClientStream<MyClient, TcpClient<crate::RT>>;
 
 pub async fn init_client(
-    config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>, rt: &crate::RT,
+    config: ClientConfig, addr: &str, last_resp_ts: Option<Arc<AtomicU64>>,
 ) -> Result<FileClient, RpcIntErr> {
     let facts = MyClient::new(config);
-    FileClient::connect(facts, rt, addr, &format!("to {}", addr), last_resp_ts).await
+    FileClient::connect(facts, None, addr, &format!("to {}", addr), last_resp_ts).await
 }
 
 #[derive(PartialEq, Debug)]
@@ -158,8 +158,8 @@ impl FileClientTaskWrite {
     }
 }
 
-pub async fn init_failover_client(
-    config: ClientConfig, addrs: Vec<String>, round_robin: bool, rt: &crate::RT,
+pub fn init_failover_client(
+    config: ClientConfig, addrs: Vec<String>, round_robin: bool,
 ) -> FailoverPool<MyClient, TcpClient<crate::RT>> {
     // NOTE: Do not new rt to the client, pass a handle from TestRunner.
     // since client may be drop by test logic, it's not allow
@@ -167,10 +167,10 @@ pub async fn init_failover_client(
     let facts = MyClient::new(config);
     FailoverPool::new(
         facts,
-        rt,
+        None,
         addrs,
         round_robin,
         3,   // retry_limit
-        100, // pool_channel_size
+        100, // pool_channel_size,
     )
 }

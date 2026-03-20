@@ -65,7 +65,7 @@ pub trait ServerFacts: Sync + Send + 'static + Sized {
 ///
 /// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
 pub trait ServerTransport: Send + Sync + Sized + 'static + fmt::Debug {
-    type RT: AsyncRuntime + Clone;
+    type RT: AsyncRuntime;
 
     type Listener: AsyncListener;
 

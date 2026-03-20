@@ -12,7 +12,7 @@ pub fn init_server(config: ServerConfig) -> RpcServer<MyServer> {
 }
 
 pub async fn init_server_closure<H, FH>(
-    server_handle: H, config: ServerConfig, addr: &str, rt: &crate::RT,
+    server_handle: H, config: ServerConfig, addr: &str,
 ) -> Result<(RpcServer<MyServer>, String), std::io::Error>
 where
     H: FnOnce(FileServerTask) -> FH + Send + Sync + 'static + Clone,
@@ -23,7 +23,7 @@ where
     // to drop a tokio runtime inside async code.
     let mut server = init_server(config);
     let dispatch = new_closure_dispatcher(server_handle);
-    let local_addr = server.listen::<TcpServer<crate::RT>, _>(rt.clone(), addr, dispatch).await?;
+    let local_addr = server.listen::<TcpServer<crate::RT>, _>(addr, dispatch).await?;
     Ok((server, local_addr))
 }
 

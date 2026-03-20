@@ -124,6 +124,7 @@ use razor_rpc_tcp::{TcpClient, TcpServer};
 use nix::errno::Errno;
 use std::future::Future;
 use std::sync::Arc;
+use orb::prelude::{AsyncRuntime, AsyncExec};  // Import AsyncRuntime and AsyncExec traits
 
 // 1. Choose the async runtime, and the codec
 type RT = orb_tokio::TokioRT;
@@ -176,40 +177,44 @@ impl CalculatorService for CalculatorServer {
     }
 }
 
-async fn setup_server() -> std::io::Result<String> {
+fn setup_server() -> std::io::Result<String> {
     // 5. Server setup with default ServerFacts
     use razor_rpc::server::{RpcServer, ServerDefault};
     let server_config = ServerConfig::default();
-    let rt = RT::new_multi_thread(8);
     let mut server = RpcServer::new(ServerDefault::new(server_config));
     // 6. dispatch
     use razor_rpc::server::dispatch::Inline;
     let disp = Inline::<Codec, _>::new(CalculatorServer);
-    // 7. Start listening
-    let actual_addr = server.listen::<ServerProto, _>(rt, "127.0.0.1:8082", disp).await?;
+    // 7. Start listening (in async context)
+    let exec = RT::multi(8);
+    let actual_addr = exec.block_on(async {
+        server.listen::<ServerProto, _>("127.0.0.1:8082", disp).await
+    })?;
     Ok(actual_addr)
 }
 
-async fn use_client(server_addr: &str) {
+fn use_client(server_addr: &str) {
     use razor_rpc::client::*;
     // 8. ClientFacts
     let mut client_config = ClientConfig::default();
     client_config.task_timeout = 5;
-    let rt = RT::new_multi_thread(8);
     let factory = APIFact::<Codec>::new(client_config);
-    // 9. Create client connection pool
-    let pool: APIConnPool<Codec, ClientProto> = factory.new_conn_pool::<ClientProto>(&rt, server_addr);
+    // 9. Create client connection pool (pass None to use static spawn in async context)
+    let exec = RT::multi(8);
+    let pool: APIConnPool<Codec, ClientProto> = factory.new_conn_pool::<ClientProto>(Some(&exec), server_addr);
     let client = CalculatorClient::new(pool);
     //  You will have to import CalculatorService trait to call its methods
     use CalculatorService;
     // Call methods with different error types
-    if let Ok(r) = client.add((10, 20)).await {
-        assert_eq!(r, 30);
-    }
-    // This will return a string error, but connect might fail, who knows
-    if let Err(e) = client.div((10, 0)).await {
-        println!("error occurred: {}", e);
-    }
+    exec.block_on(async {
+        if let Ok(r) = client.add((10, 20)).await {
+            assert_eq!(r, 30);
+        }
+        // This will return a string error, but connect might fail, who knows
+        if let Err(e) = client.div((10, 0)).await {
+            println!("error occurred: {}", e);
+        }
+    });
 }
 ```
 
@@ -289,6 +294,7 @@ pub trait KVService {
 }
 
 // Client initialization with failover pool
+use orb::prelude::{AsyncRuntime, AsyncExec};
 type RT = orb_tokio::TokioRT;
 type Codec = razor_rpc_codec::MsgpCodec;
 type FailoverCaller = razor_rpc::client::APIFailoverPool<Codec, TcpClient<RT>>;
@@ -297,18 +303,17 @@ impl KVClient<FailoverCaller> {
     pub fn new_cluster_client(
         config: ClientConfig,
         addrs: Vec<String>,
-        rt: &RT
+        exec: Option<&<RT as AsyncRuntime>::Exec>,
     ) -> Self {
         let fact = APIFact::<Codec>::new(config);
         // stateless=false: maintain leader affinity for stateful service
-        let pool = fact.new_failover::<TcpClient<RT>>(rt, addrs, false, 3);
+        let pool = fact.new_failover::<TcpClient<RT>>(exec, addrs, false, 3);
         KVClient::new(pool)
     }
 }
 
 // Usage
-async fn example() {
-    let rt = RT::new_multi_thread(8);
+fn example() {
     let config = ClientConfig::default();
     let addrs = vec![
         "127.0.0.1:8080".to_string(),
@@ -316,13 +321,17 @@ async fn example() {
         "127.0.0.1:8082".to_string(),
     ];
 
-    let client = KVClient::new_cluster_client(config, addrs, &rt);
+    let exec = RT::multi(8);
+    // Pass Some(&exec) if you want to use specific executor, or None for static spawn
+    let client = KVClient::new_cluster_client(config, addrs, Some(&exec));
 
-    // Write goes to leader (with automatic redirect if needed)
-    client.put(("key1".to_string(), "value1".to_string())).await.unwrap();
+    exec.block_on(async {
+        // Write goes to leader (with automatic redirect if needed)
+        client.put(("key1".to_string(), "value1".to_string())).await.unwrap();
 
-    // Read can go to any node
-    let value = client.get("key1".to_string()).await.unwrap();
+        // Read can go to any node
+        let value = client.get("key1".to_string()).await.unwrap();
+    });
 }
 ```
 

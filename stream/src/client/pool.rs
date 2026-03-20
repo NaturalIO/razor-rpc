@@ -5,7 +5,7 @@ use crate::client::{
 use crate::error::RpcIntErr;
 use captains_log::filter::LogFilter;
 use crossfire::{MAsyncRx, MAsyncTx, MTx, RecvTimeoutError, mpmc};
-use orb::prelude::{AsyncExec, AsyncTime};
+use orb::prelude::{AsyncExec, AsyncRuntime, AsyncTime};
 use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -65,7 +65,14 @@ struct ConnPoolInner<F: ClientFacts, P: ClientTransport> {
 const ONE_SEC: Duration = Duration::from_secs(1);
 
 impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
-    pub fn new(facts: Arc<F>, rt: &P::RT, addr: &str, mut channel_size: usize) -> Self {
+    /// # Argument
+    ///
+    /// - `rt`: When we are in orb async context, just pass None, otherwise (in thread context),
+    ///   pass the AsyncRuntime::Exec.
+    pub fn new(
+        facts: Arc<F>, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addr: &str,
+        mut channel_size: usize,
+    ) -> Self {
         let config = facts.get_config();
         if config.thresholds > 0 {
             if channel_size < config.thresholds {
@@ -116,7 +123,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
     /// by default there's one worker thread after initiation, but you can pre-spawn more thread if
     /// the connection is not enough to achieve desired throughput.
     #[inline]
-    pub fn spawn(&self, rt: &P::RT) {
+    pub fn spawn(&self, rt: Option<&<P::RT as AsyncRuntime>::Exec>) {
         let worker_id = self.inner.worker_count.fetch_add(1, Acquire);
         self.inner.clone().spawn_worker(rt, worker_id);
     }
@@ -153,14 +160,19 @@ impl<F: ClientFacts, P: ClientTransport> fmt::Display for ConnPoolInner<F, P> {
 }
 
 impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
-    fn spawn_worker(self: Arc<Self>, rt: &P::RT, worker_id: usize) {
-        let _rt = rt.clone();
-        rt.spawn_detach(async move {
+    #[inline]
+    fn spawn_worker(self: Arc<Self>, rt: Option<&<P::RT as AsyncRuntime>::Exec>, worker_id: usize) {
+        let f = async move {
             logger_trace!(&self.logger, "{} worker_id={} running", self, worker_id);
-            self.run(_rt, worker_id).await;
+            self.run(worker_id).await;
             self.worker_count.fetch_sub(1, SeqCst);
             logger_trace!(&self.logger, "{} worker_id={} exit", self, worker_id);
-        });
+        };
+        if let Some(_rt) = rt {
+            _rt.spawn_detach(f);
+        } else {
+            P::RT::spawn_detach(f);
+        }
     }
 
     #[inline(always)]
@@ -179,8 +191,8 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
     }
 
     #[inline]
-    async fn connect(&self, rt: &P::RT) -> Result<ClientStream<F, P>, RpcIntErr> {
-        ClientStream::connect(self.facts.clone(), rt, &self.addr, &self.conn_id, None).await
+    async fn connect(&self) -> Result<ClientStream<F, P>, RpcIntErr> {
+        ClientStream::connect(self.facts.clone(), None, &self.addr, &self.conn_id, None).await
     }
 
     #[inline(always)]
@@ -218,9 +230,9 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
     /// connection attempts happens after we spawn.
     /// If the address is dead, the thread might exit after multiple attempts, and later re-spawn
     /// when the needs arrives.
-    async fn run(self: &Arc<Self>, rt: P::RT, mut worker_id: usize) {
+    async fn run(self: &Arc<Self>, mut worker_id: usize) {
         'CONN_LOOP: loop {
-            match self.connect(&rt).await {
+            match self.connect().await {
                 Ok(mut stream) => {
                     logger_trace!(self.logger, "{} worker={} connected", self, worker_id);
                     if worker_id == 0 {
@@ -260,7 +272,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPoolInner<F, P> {
                                             // there's might be a lag to connect,
                                             // so we are spawning identity with new worker,
                                             worker_id = 1;
-                                            self.clone().spawn_worker(&rt, 0);
+                                            self.clone().spawn_worker(None, 0);
                                         }
                                         if stream.send_task(task, true).await.is_err() {
                                             self.set_err();

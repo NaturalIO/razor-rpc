@@ -147,7 +147,7 @@ impl<C: ClientCallerBlocking + Send + Sync> ClientCallerBlocking for Arc<C> {
 ///
 /// - [razor-rpc-tcp](https://docs.rs/razor-rpc-tcp): For TCP and Unix socket
 pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
-    type RT: AsyncRuntime + Clone;
+    type RT: AsyncRuntime;
 
     /// How to establish an async connection.
     ///

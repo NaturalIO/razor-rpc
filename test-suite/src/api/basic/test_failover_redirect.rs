@@ -160,9 +160,9 @@ pub struct QueryResp {
 pub type FailoverCaller = razor_rpc::client::APIFailoverPool<MsgpCodec, TcpClient<crate::RT>>;
 
 impl QueryClient<FailoverCaller> {
-    pub fn new_failover_client(config: ClientConfig, addrs: Vec<String>, rt: &crate::RT) -> Self {
+    pub fn new_failover_client(config: ClientConfig, addrs: Vec<String>) -> Self {
         let fact = APIFact::<MsgpCodec>::new(config);
-        let pool = fact.new_failover::<TcpClient<crate::RT>>(rt, addrs, false, 3);
+        let pool = fact.new_failover::<TcpClient<crate::RT>>(None, addrs, false, 3);
         QueryClient::new(pool)
     }
 }
@@ -205,31 +205,29 @@ impl QueryService for QueryServiceImpl {
 }
 
 /// Start a query server at given bind address
-async fn start_query_server<RT: orb::AsyncRuntime + Clone>(
-    rt: RT, bind_addr: &str, node_index: usize, state: Arc<Mutex<ClusterState>>,
+async fn start_query_server(
+    bind_addr: &str, node_index: usize, state: Arc<Mutex<ClusterState>>,
     server_config: ServerConfig,
 ) -> (RpcServer<ServerDefault>, String) {
     let mut server = RpcServer::new(ServerDefault::new(server_config));
     let service_impl = QueryServiceImpl { node_index, state };
     let dispatch = Inline::<MsgpCodec, _>::new(service_impl);
     let actual_addr =
-        server.listen::<TcpServer<RT>, _>(rt, bind_addr, dispatch).await.expect("server listen");
+        server.listen::<TcpServer<crate::RT>, _>(bind_addr, dispatch).await.expect("server listen");
     (server, actual_addr)
 }
 
 /// Start a 3-node query cluster
-async fn start_three_node_query_cluster<RT: orb::AsyncRuntime + Clone>(
-    rt: RT,
-) -> (Arc<Mutex<ClusterState>>, Vec<RpcServer<ServerDefault>>) {
+async fn start_three_node_query_cluster()
+-> (Arc<Mutex<ClusterState>>, Vec<RpcServer<ServerDefault>>) {
     let server_config = ServerConfig::default();
     let cluster_state = Arc::new(Mutex::new(ClusterState::new(vec![], 0)));
     let mut servers = Vec::new();
     for i in 0..3 {
         let state_clone = cluster_state.clone();
-        let rt_clone = rt.clone();
         let addr = "127.0.0.1:0";
         let (server, actual_addr) =
-            start_query_server(rt_clone, &addr, i, state_clone, server_config.clone()).await;
+            start_query_server(&addr, i, state_clone, server_config.clone()).await;
         assert_eq!(cluster_state.lock().add_addr(actual_addr), i);
         servers.push(server);
     }
@@ -242,16 +240,14 @@ async fn start_three_node_query_cluster<RT: orb::AsyncRuntime + Clone>(
 #[logfn]
 #[rstest]
 fn test_failover_leader_redirect(runner: TestRunner) {
-    let rt = runner.rt.clone();
-    runner.rt.block_on(async move {
+    runner.exec.block_on(async move {
         let client_config = ClientConfig::default();
-        let (cluster_state, _servers) = start_three_node_query_cluster(rt.clone()).await;
+        let (cluster_state, _servers) = start_three_node_query_cluster().await;
         let actual_addrs = { cluster_state.lock().addrs.clone() };
         log::debug!("Server addresses: {:?}", actual_addrs);
 
         // Test 1: Query should reach leader (node 1)
-        let client =
-            QueryClient::new_failover_client(client_config.clone(), actual_addrs.clone(), &rt);
+        let client = QueryClient::new_failover_client(client_config.clone(), actual_addrs.clone());
         let resp = client.query(()).await.expect("query should succeed");
         assert_eq!(resp.server_id, 0, "Query should reach initial leader (node 0)");
         log::info!("Test 1 passed: query reached node 1 (initial leader)");
@@ -268,15 +264,13 @@ fn test_failover_leader_redirect(runner: TestRunner) {
 #[logfn]
 #[rstest]
 fn test_failover_retry_limit(runner: TestRunner) {
-    let rt = runner.rt.clone();
-    runner.block_on(async move {
+    runner.exec.block_on(async move {
         let client_config = ClientConfig::default();
-        let (cluster_state, _servers) = start_three_node_query_cluster(rt.clone()).await;
+        let (cluster_state, _servers) = start_three_node_query_cluster().await;
         let actual_addrs = { cluster_state.lock().addrs.clone() };
         log::debug!("Server addresses: {:?}", actual_addrs);
 
-        let client =
-            QueryClient::new_failover_client(client_config.clone(), actual_addrs.clone(), &rt);
+        let client = QueryClient::new_failover_client(client_config.clone(), actual_addrs.clone());
         let resp = client.always_error_query(()).await;
         // Should fail because all retries exhausted
         assert_eq!(resp.unwrap_err(), RpcError::User(ClusterErr::RetryNext));
@@ -287,29 +281,22 @@ fn test_failover_retry_limit(runner: TestRunner) {
 #[logfn]
 #[rstest]
 fn test_redirect_to_new_address(runner: TestRunner) {
-    let rt = runner.rt.clone();
-    runner.rt.block_on(async move {
+    runner.exec.block_on(async move {
         let client_config = ClientConfig::default();
-        let (cluster_state, mut _servers) = start_three_node_query_cluster(rt.clone()).await;
+        let (cluster_state, mut _servers) = start_three_node_query_cluster().await;
         let actual_addrs = { cluster_state.lock().addrs.clone() };
         log::debug!("Server addresses: {:?}", actual_addrs);
 
-        let client =
-            QueryClient::new_failover_client(client_config.clone(), actual_addrs.clone(), &rt);
+        let client = QueryClient::new_failover_client(client_config.clone(), actual_addrs.clone());
 
         // Test 1: Query should reach leader (node 1)
         let resp = client.query(()).await.expect("query should succeed");
         assert_eq!(resp.server_id, 0, "query should reach initial leader (node 0)");
 
         // Test 2: start server3 and change leader to it
-        let (server3, actual_addr3) = start_query_server(
-            rt.clone(),
-            "127.0.0.1:0",
-            3,
-            cluster_state.clone(),
-            ServerConfig::default(),
-        )
-        .await;
+        let (server3, actual_addr3) =
+            start_query_server("127.0.0.1:0", 3, cluster_state.clone(), ServerConfig::default())
+                .await;
 
         assert_eq!(cluster_state.lock().add_addr(actual_addr3), 3);
         _servers.push(server3);

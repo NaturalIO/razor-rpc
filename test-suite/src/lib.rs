@@ -14,10 +14,10 @@ pub type RT = orb_tokio::TokioRT;
 #[cfg(not(feature = "tokio"))]
 pub type RT = orb_smol::SmolRT;
 
-pub fn new_rt() -> RT {
+pub fn new_exec() -> <RT as orb::AsyncRuntime>::Exec {
     #[cfg(feature = "tokio")]
     {
-        RT::new_multi_thread(
+        RT::multi(
             std::thread::available_parallelism()
                 .unwrap_or(std::num::NonZero::new(1).unwrap())
                 .into(),
@@ -25,7 +25,7 @@ pub fn new_rt() -> RT {
     }
     #[cfg(not(feature = "tokio"))]
     {
-        RT::new_global()
+        RT::multi(2)
     }
 }
 
@@ -87,23 +87,16 @@ impl fmt::Debug for TestRunner {
 }
 
 pub struct TestRunner {
-    pub rt: crate::RT,
+    pub exec: <crate::RT as orb::AsyncRuntime>::Exec,
 }
 
 impl TestRunner {
     pub fn new() -> Self {
         recipe::raw_file_logger("/tmp/rpc_test.log", Level::Trace).test().build().expect("log");
-        Self { rt: crate::new_rt() }
+        Self { exec: crate::new_exec() }
     }
 
     pub fn block_on<F: Future<Output = ()> + Send + 'static>(&self, f: F) {
-        #[cfg(feature = "tokio")]
-        {
-            self.rt.block_on(f);
-        }
-        #[cfg(not(feature = "tokio"))]
-        {
-            smol::block_on(f);
-        }
+        self.exec.block_on(f);
     }
 }

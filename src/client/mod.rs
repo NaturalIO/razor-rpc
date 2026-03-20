@@ -34,13 +34,14 @@ impl<C: Codec> APIFact<C> {
     }
 
     pub fn new_conn_pool<P: ClientTransport>(
-        self: Arc<Self>, rt: &P::RT, addr: &str,
+        self: Arc<Self>, rt: Option<&<P::RT as orb::AsyncRuntime>::Exec>, addr: &str,
     ) -> APIConnPool<C, P> {
         ConnPool::<APIFact<C>, P>::new(self.clone(), rt, addr, 0)
     }
 
     pub fn new_failover<P: ClientTransport>(
-        self: Arc<Self>, rt: &P::RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
+        self: Arc<Self>, rt: Option<&<P::RT as orb::AsyncRuntime>::Exec>, addrs: Vec<String>,
+        stateless: bool, retry_limit: usize,
     ) -> APIFailoverPool<C, P> {
         FailoverPool::<APIFact<C>, P>::new(self.clone(), rt, addrs, stateless, retry_limit, 0)
     }

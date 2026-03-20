@@ -2,7 +2,7 @@ use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MAsyncRx, mpmc, mpsc, null::CloseHandle};
-use orb::prelude::AsyncTime;
+use orb::prelude::{AsyncJoiner, AsyncTime};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -13,7 +13,7 @@ where
     F: ServerFacts,
 {
     // join handles
-    listeners_abort: Vec<(Box<dyn AsyncHandle<()>>, String)>,
+    listeners_abort: Vec<(Box<dyn AsyncJoiner<()>>, String)>,
     logger: Arc<LogFilter>,
     facts: Arc<F>,
     conn_ref_count: Arc<()>,
@@ -40,7 +40,7 @@ where
     }
 
     pub async fn listen<P: ServerTransport, D: Dispatch>(
-        &mut self, rt: P::RT, addr: &str, dispatch: D,
+        &mut self, addr: &str, dispatch: D,
     ) -> io::Result<String> {
         match P::bind(addr).await {
             Err(e) => {
@@ -64,8 +64,7 @@ where
                 let listener_info = format!("listener {:?}", addr);
                 let server_close_rx = self.server_close_rx.clone();
                 debug!("listening on {:?}", listener);
-                let _rt = rt.clone();
-                let handle = rt.spawn(async move {
+                let handle = P::RT::spawn(async move {
                     loop {
                         match listener.accept().await {
                             Err(e) => {
@@ -76,7 +75,6 @@ where
                                 let conn =
                                     P::new_conn(stream, facts.get_config(), conn_ref_count.clone());
                                 Self::server_conn::<P, D>(
-                                    &_rt,
                                     conn,
                                     &facts,
                                     dispatch.clone(),
@@ -93,7 +91,7 @@ where
     }
 
     fn server_conn<P: ServerTransport, D: Dispatch>(
-        rt: &P::RT, conn: P, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
+        conn: P, facts: &F, dispatch: D, server_close_rx: MAsyncRx<mpmc::Null>,
     ) {
         let conn = Arc::new(conn);
 
@@ -117,7 +115,7 @@ where
             server_close_rx,
             logger: facts.new_logger(),
         };
-        rt.spawn_detach(async move { reader.run().await });
+        P::RT::spawn_detach(async move { reader.run().await });
 
         impl<P: ServerTransport, D: Dispatch> Reader<P, D> {
             async fn run(self) -> Result<(), ()> {
@@ -164,7 +162,7 @@ where
             logger: Arc<LogFilter>,
         }
         let writer = Writer::<P, D> { done_rx, codec, conn, logger: facts.new_logger() };
-        rt.spawn_detach(async move { writer.run().await });
+        P::RT::spawn_detach(async move { writer.run().await });
 
         impl<P: ServerTransport, D: Dispatch> Writer<P, D> {
             async fn run(self) -> Result<(), io::Error> {

@@ -11,7 +11,7 @@ use ahash::AHashMap;
 use arc_swap::ArcSwap;
 use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MTx, SendError, mpsc};
-use orb::prelude::AsyncExec;
+use orb::prelude::{AsyncExec, AsyncRuntime};
 use parking_lot::Mutex;
 use std::fmt;
 use std::sync::{
@@ -57,9 +57,9 @@ where
     next_node: AtomicUsize,
     pool_channel_size: usize,
     facts: Arc<FailoverFacts<F>>,
-    rt: P::RT,
     /// Mutex to protect concurrent pool addition
     add_pool_mutex: Mutex<()>,
+    rt: Option<<P::RT as AsyncRuntime>::Exec>,
 }
 
 struct ClusterConfig<F, P>
@@ -77,11 +77,17 @@ where
     P: ClientTransport,
 {
     /// Initiate the pool with multiple addresses.
-    /// When stateless == true, all addresses in the pool will be selected with equal chance (round-robin);
-    /// When stateless == false, the leader address will always be picked unless error happens.
+
+    ///
+    /// # Argument
+    ///
+    /// - `rt`: When we are in orb async context, just pass None, otherwise (in thread context),
+    ///   pass the AsyncRuntime::Exec.
+    /// - `stateless`:  When true, all addresses in the pool will be selected with equal chance (round-robin);
+    ///   When  false, the leader address will always be picked unless error happens.
     pub fn new(
-        facts: Arc<F>, rt: &P::RT, addrs: Vec<String>, stateless: bool, retry_limit: usize,
-        pool_channel_size: usize,
+        facts: Arc<F>, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addrs: Vec<String>,
+        stateless: bool, retry_limit: usize, pool_channel_size: usize,
     ) -> Self {
         let (retry_tx, retry_rx) = mpsc::unbounded_async();
         let retry_logger = facts.new_logger();
@@ -99,13 +105,16 @@ where
             facts: wrapped_facts,
             next_node: AtomicUsize::new(0),
             pool_channel_size,
-            rt: rt.clone(),
             add_pool_mutex: Mutex::new(()),
+            rt: rt.cloned(),
         });
         let weak_self = Arc::downgrade(&inner);
-        rt.spawn_detach(async move {
-            FailoverPoolInner::retry_worker(weak_self, retry_logger, retry_rx).await;
-        });
+        let f = FailoverPoolInner::retry_worker(weak_self, retry_logger, retry_rx);
+        if let Some(_rt) = rt {
+            _rt.spawn_detach(f);
+        } else {
+            P::RT::spawn_detach(f);
+        }
         Self { inner }
     }
 
@@ -187,8 +196,7 @@ where
             }
             let mut new_cluster = Vec::with_capacity(old_cluster.pools.len() + 1);
             // Create new pool for the address
-            let new_pool =
-                ConnPool::new(inner.facts.clone(), &inner.rt, addr, inner.pool_channel_size);
+            let new_pool = ConnPool::new(inner.facts.clone(), None, addr, inner.pool_channel_size);
 
             // Build new cluster config with the new pool inserted at front (index 0)
             // New address is likely the leader, so prioritize it
@@ -219,7 +227,7 @@ where
                     // Create a new pool for the new address
                     let new_pool = ConnPool::new(
                         inner.facts.clone(),
-                        &inner.rt,
+                        inner.rt.as_ref(),
                         &addr,
                         inner.pool_channel_size,
                     );

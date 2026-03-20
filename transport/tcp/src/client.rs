@@ -203,7 +203,7 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
     }
 }
 
-impl<RT: AsyncRuntime + Clone> ClientTransport for TcpClient<RT> {
+impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     type RT = RT;
 
     async fn connect(addr: &str, conn_id: &str, config: &ClientConfig) -> Result<Self, RpcIntErr> {
