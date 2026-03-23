@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.9.0] - 2026-03-24
+
+### Changed
+
+- Adapted to new interface of orb-0.11
+
 ## [0.8.0] - 2026-03-17
 
 ### Added

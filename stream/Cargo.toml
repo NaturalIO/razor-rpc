@@ -1,6 +1,6 @@
 [package]
 name = "razor-stream"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 authors = ["plan <frostyplanet@gmail.com>"]
 categories = ["concurrency", "network-programming"]
@@ -22,7 +22,7 @@ close_fds = ">=0.3.2"
 strum = {version = "0", features = ["derive"]}
 nix = "0"
 thiserror = "2"
-orb = ">=0.7"
+orb = ">=0.11"
 arc-swap = "1"
 razor-rpc-codec = {path="../codec/", version=">=0.3"}
 razor-stream-macros = {path="macros", version=">=0.8"}
