@@ -32,12 +32,22 @@ pub trait ClientTask:
 
 /// Encode the request to buffer that can be send to server
 pub trait ClientTaskEncode {
+    /// Encode request message into `buf`, return the encodec message length (the increasment of
+    /// buffer length)
+    ///
+    /// # Example
+    ///
+    /// ```no_compile
+    /// return codec.encode_into(&self.req_field, buf);
+    /// ```
     /// sererialized the msg into buf (with std::io::Writer), and return the size written
     fn encode_req<C: Codec>(&self, codec: &C, buf: &mut Vec<u8>) -> Result<usize, ()>;
 
     /// Contain optional extra data to send to server side.
     ///
-    /// By Default, return None when client task does not have a req_blob field
+    /// We may return None when client task does not have a req_blob field.
+    ///
+    /// NOTE: return `Some(&[])` zero-length slice has the same effect with returning `None`.
     #[inline(always)]
     fn get_req_blob(&self) -> Option<&[u8]> {
         None
@@ -46,14 +56,30 @@ pub trait ClientTaskEncode {
 
 /// Decode the response from server and assign to the task struct
 pub trait ClientTaskDecode {
+    /// Decode response message and set into the task fields
+    ///
+    /// # Example
+    ///
+    /// ```no_compile
+    /// let resp = codec.decode(buffer)?;
+    /// self.resp_field_name = Some(resp);
+    /// ```
     fn decode_resp<C: Codec>(&mut self, codec: &C, buf: &[u8]) -> Result<(), ()>;
 
-    /// You can call crate::io::AllocateBuf::reserve(_size) on the following types:
+    /// Set **exact** length for response buffer field and return the mutable slice for write.
+    ///
+    /// Expect to return a mutable slice ref of length `_exact_size` is not zero.
+    ///
+    /// # NOTE
+    ///
+    /// this is different meaning than `Vec::reserve()` in std.
+    ///
+    /// You can call [`AllocateBuf::reserve(_exact_size)`](crate::buffer::AllocateBuf::reserve) on the following types:
     /// `Option<Vec<u8>>`, `Vec<u8>`, `Option<io_buffer::Buffer>`, `io_buffer::Buffer`
     ///
-    /// By Default, return None when client task does not have a resp_blob field
+    /// By Default, return None when client task does not have a resp_blob field.
     #[inline(always)]
-    fn reserve_resp_blob(&mut self, _size: i32) -> Option<&mut [u8]> {
+    fn reserve_resp_blob(&mut self, _exact_size: i32) -> Option<&mut [u8]> {
         None
     }
 }

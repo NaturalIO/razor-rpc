@@ -91,6 +91,7 @@ where
         Self::new(self.task_handle.clone())
     }
 }
+
 impl<C, T, R, H, F> Dispatch for DispatchClosure<C, T, R, H, F>
 where
     C: Codec,
