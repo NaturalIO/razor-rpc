@@ -29,3 +29,35 @@ pub trait Codec: Default + Send + Sync + Sized + 'static {
 mod msgpack;
 #[cfg(feature = "msgpack")]
 pub use msgpack::*;
+
+/// A codec just panics when called.
+///
+/// # NOTE:
+///
+/// Because ClientTask traits is not bound to Codec type,
+/// you can assign `NullCodec` to ClientFacts when tasks need determined type of `Codec`
+#[derive(Default)]
+pub struct NullCodec();
+
+impl Codec for NullCodec {
+    fn encode<T>(&self, _task: &T) -> Result<Vec<u8>, ()>
+    where
+        T: Serialize,
+    {
+        unreachable!("DummyCodec");
+    }
+
+    fn encode_into<T>(&self, _task: &T, _buf: &mut Vec<u8>) -> Result<usize, ()>
+    where
+        T: Serialize,
+    {
+        unreachable!("DummyCodec");
+    }
+
+    fn decode<'a, T>(&self, _buf: &'a [u8]) -> Result<T, ()>
+    where
+        T: Deserialize<'a>,
+    {
+        unreachable!("DummyCodec");
+    }
+}
