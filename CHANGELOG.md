@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [razor-rpc-codec 0.4.0] - 2026-11-12
+
+### Added
+
+- codec: Add NullCodec
+
 ## [0.9.0] - 2026-03-24
 
 ### Changed
