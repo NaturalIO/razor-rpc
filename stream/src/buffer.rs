@@ -14,7 +14,8 @@ impl AllocateBuf for Option<Vec<u8>> {
         let blob_len = blob_len as usize;
         if let Some(buf) = self.as_mut() {
             if buf.len() != blob_len {
-                if buf.capacity() < blob_len {
+                if buf.capacity() >= blob_len {
+                } else {
                     buf.reserve(blob_len - buf.capacity());
                 }
                 unsafe { buf.set_len(blob_len) };
@@ -34,7 +35,8 @@ impl AllocateBuf for Vec<u8> {
     fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
         let blob_len = blob_len as usize;
         if self.len() != blob_len {
-            if self.capacity() < blob_len {
+            if self.capacity() >= blob_len {
+            } else {
                 self.reserve(blob_len - self.capacity());
             }
             unsafe { self.set_len(blob_len) };
@@ -75,12 +77,32 @@ impl AllocateBuf for io_buffer::Buffer {
     #[inline]
     fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
         let blob_len = blob_len as usize;
-        if self.len() != blob_len {
+        if self.len() == blob_len {
+        } else {
             if self.capacity() < blob_len {
                 return None;
             }
             self.set_len(blob_len);
         }
         Some(self)
+    }
+}
+
+#[cfg(feature = "smallvec")]
+impl<A: smallvec::Array<Item = u8> + Send + 'static> AllocateBuf for smallvec::SmallVec<A>
+where
+    A::Item: Send,
+{
+    #[inline]
+    fn reserve(&mut self, blob_len: i32) -> Option<&mut [u8]> {
+        let blob_len = blob_len as usize;
+        if self.len() != blob_len {
+            if self.capacity() >= blob_len {
+            } else {
+                self.reserve(blob_len - self.capacity());
+            }
+            unsafe { self.set_len(blob_len) };
+        }
+        return Some(self.as_mut());
     }
 }
