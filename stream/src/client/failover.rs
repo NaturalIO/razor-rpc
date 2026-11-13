@@ -77,7 +77,6 @@ where
     P: ClientTransport,
 {
     /// Initiate the pool with multiple addresses.
-
     ///
     /// # Argument
     ///
@@ -494,7 +493,7 @@ impl<T: ClientTask> ClientTaskDecode for FailoverTask<T> {
     }
 
     #[inline(always)]
-    fn reserve_resp_blob(&mut self, _size: i32) -> Option<&mut [u8]> {
+    fn reserve_resp_blob(&mut self, _size: u32) -> Option<&mut [u8]> {
         self.inner.reserve_resp_blob(_size)
     }
 }

@@ -79,7 +79,7 @@ pub trait ClientTaskDecode {
     ///
     /// By Default, return None when client task does not have a resp_blob field.
     #[inline(always)]
-    fn reserve_resp_blob(&mut self, _exact_size: i32) -> Option<&mut [u8]> {
+    fn reserve_resp_blob(&mut self, _exact_size: u32) -> Option<&mut [u8]> {
         None
     }
 }

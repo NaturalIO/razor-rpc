@@ -130,7 +130,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
     let reserve_resp_blob_body = if let Some((resp_blob_field_name, _)) = &resp_blob_field {
         quote! {
             #[inline]
-            fn reserve_resp_blob(&mut self, size: i32) -> Option<&mut [u8]> {
+            fn reserve_resp_blob(&mut self, size: u32) -> Option<&mut [u8]> {
                 razor_stream::buffer::AllocateBuf::reserve(&mut self.#resp_blob_field_name, size)
             }
         }

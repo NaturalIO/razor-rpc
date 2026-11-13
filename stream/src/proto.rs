@@ -22,14 +22,14 @@
 //! | `format`  | 1B   | Encoder-decoder format                    |
 //! | `action`  | 4B   | Action type (numeric or length if string) |
 //! | `seq`     | 8B   | Increased ID of request message           |
-//! | `client_id`| 8B   | Client identifier                         |
+//! | `client_id`| 8B   | Client identifier                        |
 //! | `msg_len` | 4B   | Structured message length                 |
 //! | `blob_len`| 4B   | Unstructured message (blob) length        |
 //!
 //! Variable length message components:
 //! - `action_len` (if `action` is a string)
-//! - `msg_len`
-//! - `blob_len`
+//! - `msg_len`: [0: u32::MAX]
+//! - `blob_len`: [0: u32::MAX]
 //!
 //! ## Response:
 //!
@@ -39,14 +39,17 @@
 //! |-----------|------|-------------------------------------------|
 //! | `magic`   | 2B   | Magic number                              |
 //! | `ver`     | 1B   | Protocol version                          |
-//! | `has_err` | 1B   | Error flag                                |
+//! | `err_flag` | 1B   | Error flag                                |
 //! | `seq`     | 8B   | Increased ID of request message           |
 //! | `msg_len` | 4B   | Structured message length or errno        |
 //! | `blob_len`| 4B   | Unstructured message (blob) length        |
 //!
 //! Variable length message components:
-//! - `msg_len`
-//! - `blob_len`
+//! - `msg_len` (4B):
+//!   - `err_flag = 0`: msg_len range = [0, u32::MAX]
+//!   - `err_flag = RESP_FLAG_HAS_ERRNO`: `EncodedErr::Num`:  [0, u32::MAX]
+//!   - `err_flag = RESP_FLAG_HAS_ERR_STRING: `EncodedErr::Buf`:  err_buf_len [0, u32::MAX]
+//! - `blob_len`: [0, u32::MAX]
 
 use crate::client::task::ClientTask;
 use crate::server::task::ServerTaskEncode;
@@ -171,18 +174,27 @@ impl ReqHead {
             }
         }
         let msg_len = task.encode_req(codec, buf)?;
-        if msg_len > u32::MAX as usize {
+        if msg_len <= u32::MAX as usize {
+            let o_blob = task.get_req_blob();
+            let blob_len = if let Some(blob) = &o_blob { blob.len() } else { 0 };
+            if blob_len <= i32::MAX as usize {
+                Self::_write_head(
+                    buf,
+                    client_id,
+                    action_flag,
+                    task.seq(),
+                    msg_len as u32,
+                    blob_len as i32,
+                );
+                Ok(o_blob)
+            } else {
+                error!("ReqHead: blob_len {} cannot larger than i32", blob_len);
+                Err(())
+            }
+        } else {
             error!("ReqHead: req len {} cannot larger than u32", msg_len);
-            return Err(());
+            Err(())
         }
-        let blob = task.get_req_blob();
-        let blob_len = if let Some(blob) = blob { blob.len() } else { 0 };
-        if blob_len > i32::MAX as usize {
-            error!("ReqHead: blob_len {} cannot larger than i32", blob_len);
-            return Err(());
-        }
-        Self::_write_head(buf, client_id, action_flag, task.seq(), msg_len as u32, blob_len as i32);
-        Ok(blob)
     }
 
     #[inline(always)]
@@ -255,8 +267,8 @@ pub struct RespHead {
 
     /// Increased ID of request msg in the socket connection (response.seq==request.seq)
     pub seq: little_endian::U64,
-    /// unstructured msg, only support half of 16Byte, must larger than zero
-    pub blob_len: little_endian::I32,
+    /// unstructured msg blob
+    pub blob_len: little_endian::U32,
 }
 
 pub const RPC_RESP_HEADER_LEN: usize = size_of::<RespHead>();
@@ -276,27 +288,27 @@ impl RespHead {
         unsafe { buf.set_len(RPC_RESP_HEADER_LEN) };
         let (seq, r) = task.encode_resp(codec, buf);
         match r {
-            Ok((msg_len, None)) => {
-                if msg_len > u32::MAX as usize {
-                    error!("write_resp: encoded msg len {} exceed u32 limit", msg_len);
-                    Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
+            Ok((msg_len, o_blob)) => {
+                if msg_len <= u32::MAX as usize {
+                    let blob_len = if let Some(blob) = &o_blob { blob.len() } else { 0 };
+                    if blob_len <= u32::MAX as usize {
+                        Self::_write_head(logger, buf, 0, seq, msg_len as u32, blob_len as u32);
+                        return (seq, o_blob);
+                    } else {
+                        error!("write_resp: blob len {} exceed i32 limit", blob_len);
+                        Self::_encode_error::<L>(
+                            logger,
+                            buf,
+                            seq,
+                            EncodedErr::Rpc(RpcIntErr::Encode),
+                        );
+                        return (seq, None);
+                    }
                 } else {
-                    Self::_write_head(logger, buf, 0, seq, msg_len as u32, 0);
-                }
-                return (seq, None);
-            }
-            Ok((msg_len, Some(blob))) => {
-                if msg_len > u32::MAX as usize {
                     error!("write_resp: encoded msg len {} exceed u32 limit", msg_len);
                     Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
                     return (seq, None);
-                } else if blob.len() > i32::MAX as usize {
-                    error!("write_resp: blob len {} exceed i32 limit", blob.len());
-                    Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
-                    return (seq, None);
                 }
-                Self::_write_head::<L>(logger, buf, 0, seq, msg_len as u32, blob.len() as i32);
-                return (seq, Some(blob));
             }
             Err(e) => {
                 Self::_encode_error::<L>(logger, buf, seq, e);
@@ -338,7 +350,7 @@ impl RespHead {
                     RESP_FLAG_HAS_ERR_STRING,
                     seq,
                     0,
-                    $s.len() as i32,
+                    $s.len() as u32,
                 );
                 buf.write_all($s).expect("fill error str");
             };
@@ -360,7 +372,7 @@ impl RespHead {
     }
 
     #[inline]
-    fn _write_head<L>(logger: &L, buf: &mut [u8], flag: u8, seq: u64, msg_len: u32, blob_len: i32)
+    fn _write_head<L>(logger: &L, buf: &mut [u8], flag: u8, seq: u64, msg_len: u32, blob_len: u32)
     where
         L: captains_log::filter::Filter,
     {

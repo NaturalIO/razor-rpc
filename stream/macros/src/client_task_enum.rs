@@ -218,7 +218,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
             }
 
             #[inline]
-            fn reserve_resp_blob(&mut self, size: i32) -> Option<&mut [u8]> {
+            fn reserve_resp_blob(&mut self, size: u32) -> Option<&mut [u8]> {
                 match self {
                     #(#reserve_resp_blob_arms)*
                 }
