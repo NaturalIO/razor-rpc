@@ -109,16 +109,13 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
             }
             _ => {}
         }
-        let rpc_head: &proto::ReqHead;
-        match proto::ReqHead::decode_head(&req_header_buf) {
+        let rpc_head: &proto::ReqHead = match proto::ReqHead::decode_head(&req_header_buf) {
+            Ok(head) => head,
             Err(e) => {
                 logger_warn!(logger, "{:?}: decode_head error, {}", self, e);
                 return Err(RpcIntErr::Decode);
             }
-            Ok(head) => {
-                rpc_head = head;
-            }
-        }
+        };
         logger_trace!(logger, "{:?}: recv req: {}", self, rpc_head);
         // XXX: we do return ping
         let action = match rpc_head.get_action() {

@@ -54,6 +54,7 @@ transmute_ptr_to_ref = "allow"
 len_without_is_empty = "allow"
 result_unit_err = "allow"
 module_inception = "allow"
+collapsible_if = "allow"
 
 [lints]
 workspace = true

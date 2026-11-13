@@ -108,7 +108,7 @@ impl GracefulServer {
         let mut child = cmd.spawn()?;
         let child_pid = child.id();
         let child_pid_file_path =
-            Path::new(&self.run_dir).join(format!("{}_{}", &self.prog_name, child_pid));
+            Path::new(&self.run_dir).join(format!("{}_{}", self.prog_name, child_pid));
         let start_ts = Instant::now();
 
         while Instant::now().duration_since(start_ts) <= self.restart_timeout {

@@ -72,7 +72,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
             self.got_pending_task(task);
         }
         let mut task_seqs: Vec<u64> = Vec::with_capacity(self.sent_tasks.len());
-        for (key, _) in self.sent_tasks.iter() {
+        for key in self.sent_tasks.keys() {
             task_seqs.push(*key);
         }
         for key in task_seqs {
@@ -83,7 +83,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
         }
         for tasks_batch_in_second in self.delay_tasks_queue.iter_mut() {
             let mut task_seqs: Vec<u64> = Vec::with_capacity(tasks_batch_in_second.tasks.len());
-            for (key, _) in tasks_batch_in_second.tasks.iter() {
+            for key in tasks_batch_in_second.tasks.keys() {
                 task_seqs.push(*key);
             }
             for key in task_seqs {

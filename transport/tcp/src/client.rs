@@ -45,26 +45,26 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
     #[inline(always)]
     fn get_resp_buf(&self, len: usize) -> &mut Vec<u8> {
         let buf: &mut Vec<u8> = unsafe { transmute(self.resp_buf.get()) };
-        buf.resize(len as usize, 0);
+        buf.resize(len, 0);
         buf
     }
 
-    async fn _recv_and_dump<F: ClientFacts>(&self, logger: &LogFilter, l: usize) -> io::Result<()> {
+    async fn _recv_and_dump(&self, l: usize) -> io::Result<()> {
         let reader = self.get_stream_mut();
         // TODO is there dump ?
         match Buffer::alloc(l as i32) {
-            Err(_) => {
-                logger_warn!(logger, "{:?} alloc buf failed", self);
-                return Err(io::ErrorKind::OutOfMemory.into());
-            }
             Ok(mut buf) => {
                 if let Err(e) =
                     crate::io_with_timeout!(RT, self.read_timeout, reader.read_exact(&mut buf))
                 {
-                    logger_warn!(logger, "{:?} recv task failed: {}", self, e);
+                    warn!("{:?} recv task failed: {}", self, e);
                     return Err(e);
                 }
                 return Ok(());
+            }
+            Err(_) => {
+                warn!("{:?} alloc buf failed", self);
+                return Err(io::ErrorKind::OutOfMemory.into());
             }
         }
     }
@@ -149,7 +149,7 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
                         );
                         task.set_rpc_error(RpcIntErr::Decode);
                         facts.error_handle(task);
-                        return self._recv_and_dump::<F>(logger, blob_len as usize).await;
+                        return self._recv_and_dump(blob_len as usize).await;
                     }
                     Some(buf) => {
                         // ensure buf can fit blob_len
@@ -172,13 +172,13 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
             logger_trace!(logger, "{:?} recv task {:?} ok", self, task);
             if resp_head.msg_len > 0 {
                 // set result of task, and notify task completed
-                if let Err(_) = task.decode_resp(codec, read_buf) {
+                if task.decode_resp(codec, read_buf).is_ok() {
+                    task.set_ok();
+                } else {
                     logger_warn!(logger, "{:?} rpc client reader decode resp err", self,);
                     task.set_rpc_error(RpcIntErr::Decode);
                     facts.error_handle(task);
                     return Ok(());
-                } else {
-                    task.set_ok();
                 }
             } else {
                 task.set_ok();
@@ -190,12 +190,12 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
             logger_trace!(logger, "{:?} timer take_task(seq={}) return None", self, seq);
             let mut data_len = 0;
             if resp_head.flag == 0 {
-                data_len += resp_head.msg_len.get() + resp_head.blob_len.get() as u32;
+                data_len += resp_head.msg_len.get() + resp_head.blob_len.get();
             } else if resp_head.flag == proto::RESP_FLAG_HAS_ERR_STRING {
-                data_len += resp_head.blob_len.get() as u32;
+                data_len += resp_head.blob_len.get();
             }
             if data_len > 0 {
-                return self._recv_and_dump::<F>(logger, data_len as usize).await;
+                return self._recv_and_dump(data_len as usize).await;
             } else {
                 return Ok(());
             }
@@ -212,7 +212,7 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
                 Ok(_stream) => _stream,
                 Err(e) => {
                     warn!("Cannot connect addr {}: {}", addr, e);
-                    return Err(RpcIntErr::Unreachable.into());
+                    return Err(RpcIntErr::Unreachable);
                 }
             };
         let mut buf_size = config.stream_buf_size;
@@ -313,7 +313,7 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
             }
             Ok(head) => {
                 logger_trace!(logger, "{:?} rpc client read head response {}", self, &head);
-                if let Err(e) = self._recv_resp_body(facts, logger, codec, task_reg, &head).await {
+                if let Err(e) = self._recv_resp_body(facts, logger, codec, task_reg, head).await {
                     return Err(e.into());
                 }
                 return Ok(true);
