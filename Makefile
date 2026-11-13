@@ -13,6 +13,12 @@ init: git-hooks
 fmt: init
 	cargo fmt
 
+.PHONY: clippy
+clippy:
+	cargo clippy -p razor-stream -- -D warnings
+	cargo clippy -p razor-rpc-tcp -- -D warnings
+	cargo clippy -p razor-rpc -- -D warnings
+
 .PHONY: test-all
 test-all: test-codec test-stream test-api test-leak test
 	echo run all tests

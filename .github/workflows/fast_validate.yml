@@ -18,6 +18,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: clippy 
+      run: make clippy
+
     - name: test core
       run: make test-core
 
