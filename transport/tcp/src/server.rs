@@ -99,6 +99,7 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
 
         let cancel_f = close_ch.recv_with_timer(RT::sleep(idle_timeout));
         match Cancellable::new(reader.read_exact(&mut req_header_buf), cancel_f).await {
+            Ok(Ok(())) => {}
             Ok(Err(e)) => {
                 logger_debug!(logger, "{:?}: recv_req: err {}", self, e);
                 return Err(RpcIntErr::IO);
@@ -107,7 +108,6 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
                 logger_trace!(logger, "{:?}: read timeout", self);
                 return Err(RpcIntErr::Timeout);
             }
-            _ => {}
         }
         let rpc_head: &proto::ReqHead = match proto::ReqHead::decode_head(&req_header_buf) {
             Ok(head) => head,
@@ -124,10 +124,6 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
                 let action_buf = self.get_action_buf();
                 action_buf.resize(action_len as usize, 0);
                 match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(action_buf)) {
-                    Err(e) => {
-                        logger_trace!(logger, "{:?}: read_exact error {}", self, e);
-                        return Err(RpcIntErr::IO);
-                    }
                     Ok(_) => {
                         match std::str::from_utf8(action_buf) {
                             Ok(s) => RpcAction::Str(s),
@@ -138,6 +134,10 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
                             }
                         }
                     }
+                    Err(e) => {
+                        logger_trace!(logger, "{:?}: read_exact error {}", self, e);
+                        return Err(RpcIntErr::IO);
+                    }
                 }
             }
         };
@@ -145,30 +145,32 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
         let msg_buf = self.get_msg_buf();
         msg_buf.resize(rpc_head.msg_len.get() as usize, 0);
         if rpc_head.msg_len > 0 {
-            if let Err(e) = crate::io_with_timeout!(RT, read_timeout, reader.read_exact(msg_buf)) {
-                logger_trace!(logger, "{:?}: read req msg error: {:?}", self, e);
-                return Err(RpcIntErr::IO);
+            match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(msg_buf)) {
+                Ok(()) => {}
+                Err(e) => {
+                    logger_trace!(logger, "{:?}: read req msg error: {:?}", self, e);
+                    return Err(RpcIntErr::IO);
+                }
             }
         }
-        let mut blob: Option<Buffer> = None;
         let blob_len = rpc_head.blob_len.get() as i32;
-        if blob_len > 0 {
+        let blob = if blob_len == 0 {
+            None
+        } else {
             match Buffer::alloc(blob_len) {
-                Err(_) => return Err(RpcIntErr::Decode),
                 Ok(mut ext_buf) => {
                     match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(&mut ext_buf))
                     {
+                        Ok(_) => Some(ext_buf),
                         Err(e) => {
                             logger_trace!(logger, "{:?}: read_exact_buffer error: {}", self, e);
                             return Err(RpcIntErr::IO);
                         }
-                        Ok(_) => {
-                            blob = Some(ext_buf);
-                        }
                     }
                 }
+                Err(_) => return Err(RpcIntErr::Decode),
             }
-        }
+        };
         return Ok(RpcSvrReq::<'a> { seq: rpc_head.seq.get(), action, msg: msg_buf, blob });
     }
 
@@ -180,26 +182,35 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
         let write_timeout = self.config.write_timeout;
         let buf = self.get_encode_buf();
         let (seq, blob_buf) = proto::RespHead::encode(&logger, codec, buf, &mut task);
-        if let Err(e) = crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
-            logger_warn!(logger, "{:?}: send_resp write resp seq={} msg err: {}", self, seq, e);
-            return Err(e);
-        }
-        if let Some(blob) = blob_buf {
-            if let Err(e) =
-                crate::io_with_timeout!(RT, write_timeout, writer.write_all(blob.as_ref()))
-            {
-                logger_debug!(
-                    logger,
-                    "{:?}: send_resp write resp seq={} blob err: {}",
-                    self,
-                    seq,
-                    e
-                );
+        match crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
+            Ok(()) => {
+                if let Some(blob) = blob_buf {
+                    match crate::io_with_timeout!(
+                        RT,
+                        write_timeout,
+                        writer.write_all(blob.as_ref())
+                    ) {
+                        Ok(()) => {}
+                        Err(e) => {
+                            logger_debug!(
+                                logger,
+                                "{:?}: send_resp write resp seq={} blob err: {}",
+                                self,
+                                seq,
+                                e
+                            );
+                            return Err(e);
+                        }
+                    }
+                }
+                logger_trace!(logger, "{:?}: send resp seq={}", self, seq);
+                return Ok(());
+            }
+            Err(e) => {
+                logger_warn!(logger, "{:?}: send_resp write resp seq={} msg err: {}", self, seq, e);
                 return Err(e);
             }
         }
-        logger_trace!(logger, "{:?}: send resp seq={}", self, seq);
-        return Ok(());
     }
 
     #[inline(always)]
@@ -210,23 +221,31 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
         let write_timeout = self.config.write_timeout;
         let buf = self.get_encode_buf();
         let seq = proto::RespHead::encode_internal(&logger, buf, seq, err);
-        if let Err(e) = crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
-            logger_warn!(logger, "{:?}: send_resp write resp seq={} msg err: {}", self, seq, e);
-            return Err(e);
+        match crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
+            Ok(()) => {
+                logger_trace!(logger, "{:?}: send resp seq={}", self, seq);
+                return Ok(());
+            }
+            Err(e) => {
+                logger_warn!(logger, "{:?}: send_resp write resp seq={} msg err: {}", self, seq, e);
+                return Err(e);
+            }
         }
-        logger_trace!(logger, "{:?}: send resp seq={}", self, seq);
-        return Ok(());
     }
 
     #[inline(always)]
     async fn flush_resp(&self, logger: &LogFilter) -> io::Result<()> {
         let writer = self.get_stream_mut();
-        if let Err(e) = crate::io_with_timeout!(RT, self.config.write_timeout, writer.flush()) {
-            logger_warn!(logger, "{:?}: flush err: {}", self, e);
-            return Err(e);
+        match crate::io_with_timeout!(RT, self.config.write_timeout, writer.flush()) {
+            Ok(()) => {
+                logger_trace!(logger, "{:?}: flush_resp ok", self);
+                return Ok(());
+            }
+            Err(e) => {
+                logger_warn!(logger, "{:?}: flush err: {}", self, e);
+                return Err(e);
+            }
         }
-        logger_trace!(logger, "{:?}: flush_resp ok", self);
-        return Ok(());
     }
 
     #[inline]
