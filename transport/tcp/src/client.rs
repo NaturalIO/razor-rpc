@@ -77,21 +77,15 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
         log_debug_assert!(resp_head.flag > 0);
         let reader = self.get_stream_mut();
         match resp_head.flag {
-            1 => {
+            proto::RESP_FLAG_HAS_ERRNO => {
                 // In the transport layer, we don't have routing info for last_index/conf_ver
                 task.set_custom_error(codec, EncodedErr::Num(resp_head.msg_len.get()), 0, 0);
                 facts.error_handle(task);
                 return Ok(());
             }
-            2 => {
+            proto::RESP_FLAG_HAS_ERR_STRING => {
                 let buf = self.get_resp_buf(resp_head.blob_len.get() as usize);
                 match crate::io_with_timeout!(RT, self.read_timeout, reader.read_exact(buf)) {
-                    Err(e) => {
-                        logger_warn!(logger, "{:?} recv buffer error: {}", self, e);
-                        task.set_rpc_error(RpcIntErr::IO);
-                        facts.error_handle(task);
-                        return Err(e);
-                    }
                     Ok(_) => {
                         // Only prefix by rpc_
                         if buf.starts_with(RPC_ERR_PREFIX.as_bytes()) {
@@ -107,6 +101,12 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
                         task.set_custom_error(codec, EncodedErr::Buf(buf.clone()), 0, 0);
                         facts.error_handle(task);
                         return Ok(());
+                    }
+                    Err(e) => {
+                        logger_warn!(logger, "{:?} recv buffer error: {}", self, e);
+                        task.set_rpc_error(RpcIntErr::IO);
+                        facts.error_handle(task);
+                        return Err(e);
                     }
                 }
             }
@@ -125,66 +125,71 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
         let read_buf = self.get_resp_buf(resp_head.msg_len.get() as usize);
         if let Some(mut task_item) = task_reg.take_task(resp_head.seq.get()).await {
             let mut task = task_item.task.take().unwrap();
-            if resp_head.flag > 0 {
-                return self._recv_error(facts, logger, codec, resp_head, task).await;
-            }
-            if resp_head.msg_len > 0 {
-                if let Err(e) =
-                    crate::io_with_timeout!(RT, read_timeout, reader.read_exact(read_buf))
-                {
-                    task.set_rpc_error(RpcIntErr::IO);
-                    facts.error_handle(task);
-                    return Err(e);
-                }
-            } // When msg_len == 0, read_buf has 0 size
-
-            if blob_len > 0 {
-                match task.reserve_resp_blob(blob_len) {
-                    None => {
-                        logger_error!(
-                            logger,
-                            "{:?} rpc client task {:?} has no ext_buf",
-                            self,
-                            task,
-                        );
-                        task.set_rpc_error(RpcIntErr::Decode);
-                        facts.error_handle(task);
-                        return self._recv_and_dump(blob_len as usize).await;
-                    }
-                    Some(buf) => {
-                        // ensure buf can fit blob_len
-                        if let Err(e) =
-                            crate::io_with_timeout!(RT, read_timeout, reader.read_exact(buf))
-                        {
-                            logger_warn!(
-                                logger,
-                                "{:?} rpc client reader read ext_buf err: {}",
-                                self,
-                                e
-                            );
+            if resp_head.flag == 0 {
+                if resp_head.msg_len > 0 {
+                    match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(read_buf)) {
+                        Ok(()) => {}
+                        Err(e) => {
                             task.set_rpc_error(RpcIntErr::IO);
                             facts.error_handle(task);
                             return Err(e);
                         }
                     }
+                } // When msg_len == 0, read_buf has 0 size
+
+                if blob_len > 0 {
+                    match task.reserve_resp_blob(blob_len) {
+                        Some(buf) => {
+                            // ensure buf can fit blob_len
+
+                            match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(buf))
+                            {
+                                Ok(()) => {}
+                                Err(e) => {
+                                    logger_warn!(
+                                        logger,
+                                        "{:?} rpc client reader read ext_buf err: {}",
+                                        self,
+                                        e
+                                    );
+                                    task.set_rpc_error(RpcIntErr::IO);
+                                    facts.error_handle(task);
+                                    return Err(e);
+                                }
+                            }
+                        }
+                        None => {
+                            logger_error!(
+                                logger,
+                                "{:?} rpc client task {:?} has no ext_buf",
+                                self,
+                                task,
+                            );
+                            task.set_rpc_error(RpcIntErr::Decode);
+                            facts.error_handle(task);
+                            return self._recv_and_dump(blob_len as usize).await;
+                        }
+                    }
                 }
-            }
-            logger_trace!(logger, "{:?} recv task {:?} ok", self, task);
-            if resp_head.msg_len > 0 {
-                // set result of task, and notify task completed
-                if task.decode_resp(codec, read_buf).is_ok() {
-                    task.set_ok();
+                logger_trace!(logger, "{:?} recv task {:?} ok", self, task);
+                if resp_head.msg_len > 0 {
+                    // set result of task, and notify task completed
+                    if task.decode_resp(codec, read_buf).is_ok() {
+                        task.set_ok();
+                    } else {
+                        logger_warn!(logger, "{:?} rpc client reader decode resp err", self,);
+                        task.set_rpc_error(RpcIntErr::Decode);
+                        facts.error_handle(task);
+                        return Ok(());
+                    }
                 } else {
-                    logger_warn!(logger, "{:?} rpc client reader decode resp err", self,);
-                    task.set_rpc_error(RpcIntErr::Decode);
-                    facts.error_handle(task);
-                    return Ok(());
+                    task.set_ok();
                 }
+                task.done();
+                return Ok(());
             } else {
-                task.set_ok();
+                return self._recv_error(facts, logger, codec, resp_head, task).await;
             }
-            task.done();
-            return Ok(());
         } else {
             let seq = resp_head.seq;
             logger_trace!(logger, "{:?} timer take_task(seq={}) return None", self, seq);
@@ -240,12 +245,16 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     #[inline(always)]
     async fn flush_req<F: ClientFacts>(&self, logger: &LogFilter) -> io::Result<()> {
         let writer = self.get_stream_mut();
-        if let Err(e) = crate::io_with_timeout!(RT, self.write_timeout, writer.flush()) {
-            logger_warn!(logger, "{:?} flush_req flush err: {}", self, e);
-            return Err(e);
+        match crate::io_with_timeout!(RT, self.write_timeout, writer.flush()) {
+            Ok(()) => {
+                logger_trace!(logger, "{:?}: flush_req ok", self);
+                Ok(())
+            }
+            Err(e) => {
+                logger_warn!(logger, "{:?} flush_req flush err: {}", self, e);
+                return Err(e);
+            }
         }
-        logger_trace!(logger, "{:?}: flush_req ok", self);
-        Ok(())
     }
 
     #[inline(always)]
@@ -253,24 +262,22 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
         &'a self, logger: &LogFilter, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
     ) -> io::Result<()> {
         let writer = self.get_stream_mut();
-        let write_timeout = self.write_timeout;
-
-        macro_rules! err_log {
-            ($r: expr) => {{
-                if let Err(e) = $r {
+        crate::io_with_timeout!(RT, self.write_timeout, writer.write_all(buf))?;
+        if let Some(blob_buf) = blob {
+            match crate::io_with_timeout!(RT, self.write_timeout, writer.write_all(blob_buf)) {
+                Ok(()) => {}
+                Err(e) => {
                     logger_warn!(logger, "{:?} write_req err: {}", self, e);
                     return Err(e);
                 }
-            }};
+            }
         }
-        crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf))?;
-        if let Some(blob_buf) = blob {
-            err_log!(crate::io_with_timeout!(RT, write_timeout, writer.write_all(blob_buf)));
-        }
-        if need_flush {
+        logger_trace!(logger, "{:?}: write req ok flush={need_flush}", self);
+        if !need_flush {
+        } else {
             self.flush_req::<F>(logger).await?;
         }
-        return Ok(());
+        Ok(())
     }
 
     /// return false to indicate aborted by close_f
@@ -284,39 +291,40 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
         if let Some(close_ch) = close_ch {
             let read_header_f = reader.read_exact(&mut resp_head_buf);
             let close_f = close_ch.recv();
-            let res = Cancellable::new(read_header_f, close_f).await;
-            match res {
-                Ok(r) => {
-                    if let Err(e) = r {
-                        logger_debug!(logger, "{:?} rpc client read resp head err: {:?}", self, e);
-                        return Err(e.into());
-                    }
+            match Cancellable::new(read_header_f, close_f).await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    logger_debug!(logger, "{:?} rpc client read resp head err: {:?}", self, e);
+                    return Err(e.into());
                 }
                 Err(_) => {
                     return Ok(false);
                 }
             }
         } else {
-            if let Err(e) = crate::io_with_timeout!(
+            match crate::io_with_timeout!(
                 RT,
                 self.read_timeout,
                 reader.read_exact(&mut resp_head_buf)
             ) {
-                logger_debug!(logger, "{:?} rpc client read resp head err: {}", self, e);
-                return Err(e.into());
+                Ok(()) => {}
+                Err(e) => {
+                    logger_debug!(logger, "{:?} rpc client read resp head err: {}", self, e);
+                    return Err(e.into());
+                }
             }
         }
         match proto::RespHead::decode_head(&resp_head_buf) {
+            Ok(head) => {
+                logger_trace!(logger, "{:?} rpc client read head response {}", self, &head);
+                match self._recv_resp_body(facts, logger, codec, task_reg, head).await {
+                    Ok(()) => return Ok(true),
+                    Err(e) => return Err(e.into()),
+                }
+            }
             Err(e) => {
                 logger_debug!(logger, "{:?} rpc client decode_response_header err: {}", self, e);
                 return Err(e);
-            }
-            Ok(head) => {
-                logger_trace!(logger, "{:?} rpc client read head response {}", self, &head);
-                if let Err(e) = self._recv_resp_body(facts, logger, codec, task_reg, head).await {
-                    return Err(e.into());
-                }
-                return Ok(true);
             }
         }
     }
