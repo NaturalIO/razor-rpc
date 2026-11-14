@@ -9,6 +9,7 @@ use razor_rpc_tcp::{TcpClient, TcpServer};
 use razor_stream::server::RpcServer;
 use rstest::*;
 use serde_derive::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
 
@@ -30,14 +31,14 @@ pub enum ClusterErr {
 
 impl RpcErrCodec for ClusterErr {
     #[inline(always)]
-    fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+    fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
         match self {
             Self::Redirect(addr) => {
                 let s = format!("redirect_{}", addr);
-                EncodedErr::Buf(s.into_bytes())
+                EncodedErr::Buf(Cow::Owned(s.into()))
             }
-            Self::RetryNext => EncodedErr::Static("retry_next"),
-            Self::Internal => EncodedErr::Static("internal"),
+            Self::RetryNext => EncodedErr::Buf(Cow::Borrowed(b"retry_next")),
+            Self::Internal => EncodedErr::Buf(Cow::Borrowed(b"internal")),
         }
     }
 
@@ -95,8 +96,8 @@ fn test_cluster_err() {
     // Test RetryNext error
     let err = ClusterErr::RetryNext;
     let encoded = err.encode(&codec);
-    if let EncodedErr::Static(s) = encoded {
-        let decoded = ClusterErr::decode(&codec, Err(s.as_bytes())).expect("decode failed");
+    if let EncodedErr::Buf(s) = encoded {
+        let decoded = ClusterErr::decode(&codec, Err(&s)).expect("decode failed");
         assert_eq!(decoded, err);
         assert_eq!(decoded.should_failover(), Ok(None));
     } else {
@@ -106,8 +107,8 @@ fn test_cluster_err() {
     // Test Internal error
     let err = ClusterErr::Internal;
     let encoded = err.encode(&codec);
-    if let EncodedErr::Static(s) = encoded {
-        let decoded = ClusterErr::decode(&codec, Err(s.as_bytes())).expect("decode failed");
+    if let EncodedErr::Buf(s) = encoded {
+        let decoded = ClusterErr::decode(&codec, Err(&s)).expect("decode failed");
         assert_eq!(decoded, err);
         assert_eq!(decoded.should_failover(), Err(()));
     } else {
