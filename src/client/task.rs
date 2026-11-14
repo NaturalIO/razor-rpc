@@ -64,7 +64,8 @@ impl APIClientReq {
         match res {
             Ok(()) => {
                 if let Some(resp) = &self.resp {
-                    match codec.decode(resp) {
+                    // because we owned buffer, can use decode_ref
+                    match codec.decode_ref(resp) {
                         Ok(resp_msg) => Ok(resp_msg),
                         Err(()) => Err(RpcIntErr::Decode.into()),
                     }

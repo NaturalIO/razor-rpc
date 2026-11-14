@@ -135,7 +135,7 @@ impl APIClientCaller for MockCaller {
         };
         async move {
             match resp_buf {
-                Some(buf) => match codec.decode(&buf) {
+                Some(buf) => match codec.decode_ref(&buf) {
                     Ok(resp) => Ok(resp),
                     Err(()) => Err(RpcError::Rpc(RpcIntErr::Decode)),
                 },
@@ -243,7 +243,7 @@ async fn test_endpoint_async_macro_with_async_trait() {
         assert_eq!(req1.action, "MyTestService.add");
 
         let codec = MsgpCodec::default();
-        let arg_val: AddArgs = codec.decode(&req1.req_msg).unwrap();
+        let arg_val: AddArgs = codec.decode_ref(&req1.req_msg).unwrap();
         assert_eq!(arg_val, AddArgs { a: 10, b: 20 });
     }
 
@@ -255,7 +255,7 @@ async fn test_endpoint_async_macro_with_async_trait() {
         let req2 = &requests[1];
         let codec = MsgpCodec::default();
         assert_eq!(req2.action, "MyTestService.no_args");
-        let arg_val_2: () = codec.decode(&req2.req_msg).unwrap();
+        let arg_val_2: () = codec.decode_ref(&req2.req_msg).unwrap();
         assert_eq!(arg_val_2, ());
     }
 }
@@ -277,7 +277,7 @@ async fn test_endpoint_async_macro_with_impl_future() {
         assert_eq!(req1.action, "MyFutureService.compute");
 
         let codec = MsgpCodec::default();
-        let arg_val: ComputeArgs = codec.decode(&req1.req_msg).unwrap();
+        let arg_val: ComputeArgs = codec.decode_ref(&req1.req_msg).unwrap();
         assert_eq!(arg_val, ComputeArgs { x: 5, y: 7 });
     }
 }
@@ -299,7 +299,7 @@ async fn test_endpoint_async_macro_without_async_trait() {
         assert_eq!(req1.action, "NoAsyncTraitService.concat");
 
         let codec = MsgpCodec::default();
-        let arg_val: ConcatArgs = codec.decode(&req1.req_msg).unwrap();
+        let arg_val: ConcatArgs = codec.decode_ref(&req1.req_msg).unwrap();
         assert_eq!(arg_val, ConcatArgs { a: "Hello".to_string(), b: "World".to_string() });
     }
 }
