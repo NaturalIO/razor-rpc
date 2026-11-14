@@ -5,6 +5,7 @@ use razor_rpc::{
 };
 use razor_rpc_codec::MsgpCodec;
 use razor_stream::server::task::RespNoti;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 mod common;
@@ -47,10 +48,7 @@ async fn test_multi_error_service() {
     ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 2);
-    assert_eq!(
-        resp.res.unwrap().unwrap_err(),
-        EncodedErr::Buf("string error".to_string().into_bytes())
-    );
+    assert_eq!(resp.res.unwrap().unwrap_err(), EncodedErr::Buf(Cow::Borrowed(b"string error")));
 
     // Test i32 error
     let req = create_mock_request(

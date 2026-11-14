@@ -226,6 +226,7 @@ For services with leader-follower architecture (e.g., distributed KV store, Raft
 use razor_rpc::client::{endpoint_client, endpoint_async, APIFact, APIFailoverPool, ClientConfig};
 use razor_rpc::error::{RpcErrCodec, RpcError, EncodedErr};
 use razor_rpc_tcp::{TcpClient, TcpServer};
+use std::borrow::Cow;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -245,9 +246,9 @@ pub enum ClusterErr {
 impl RpcErrCodec for ClusterErr {
     fn encode<C: razor_rpc::Codec>(&self, _codec: &C) -> EncodedErr {
         match self {
-            Self::Redirect(addr) => EncodedErr::Buf(format!("{}{}", REDIRECT_PREFIX, addr).into_bytes()),
-            Self::RetryNext => EncodedErr::Static("retry_next"),
-            Self::Internal => EncodedErr::Static("internal"),
+            Self::Redirect(addr) => EncodedErr::Buf(Cow::from(format!("{}{}", REDIRECT_PREFIX, addr).into_bytes())),
+            Self::RetryNext => EncodedErr::Buf(Cow::from(b"retry_next")),
+            Self::Internal => EncodedErr::Buf(Cow::from(b"internal")),
         }
     }
 
