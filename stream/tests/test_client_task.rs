@@ -49,7 +49,7 @@ fn test_client_task_macro() {
     // Test ClientTaskEncode
     let mut req_buf = Vec::new();
     task.encode_req(&codec, &mut req_buf).expect("encode");
-    let req_copy: FileIOReq = codec.decode(&req_buf).expect("decode");
+    let req_copy: FileIOReq = codec.decode_ref(&req_buf).expect("decode");
     assert_eq!(task.req, req_copy);
 
     // Test ClientTaskDecode
@@ -92,7 +92,7 @@ fn test_client_task_macro_with_req_blob() {
     // Test ClientTaskEncode::encode_req (should not include blob)
     let mut encoded_req_only = Vec::new();
     task.encode_req(&codec, &mut encoded_req_only).expect("encode");
-    let req_copy: FileIOReq = codec.decode(&encoded_req_only).expect("decode");
+    let req_copy: FileIOReq = codec.decode_ref(&encoded_req_only).expect("decode");
     assert_eq!(task.req, req_copy);
 
     // Test ClientTaskDecode (should still work for resp)
@@ -142,7 +142,7 @@ fn test_client_task_macro_with_resp_blob() {
     // Test ClientTaskEncode (should still work for req)
     let mut encoded_req_only = Vec::new();
     task.encode_req(&codec, &mut encoded_req_only).expect("encode");
-    let req_copy: FileIOReq = codec.decode(&encoded_req_only).expect("decode");
+    let req_copy: FileIOReq = codec.decode_ref(&encoded_req_only).expect("decode");
     assert_eq!(task.req, req_copy);
 
     // Test ClientTaskDecode (should still work for resp)

@@ -442,7 +442,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         impl #impl_generics_for_impl razor_stream::client::task::ClientTaskDecode for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
             fn decode_resp<C: razor_stream::Codec>(&mut self, codec: &C, buffer: &[u8]) -> Result<(), ()> {
-                let resp = codec.decode(buffer)?;
+                let resp = codec.decode_owned(buffer)?;
                 self.#resp_field_name = Some(resp);
                 Ok(())
             }
