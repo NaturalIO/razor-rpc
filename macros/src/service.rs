@@ -109,7 +109,7 @@ pub fn service(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             None => {
                                 unreachable!();
                             }
-                            Some(buf) => match req.codec.decode::<#arg_ty>(&buf) {
+                            Some(buf) => match req.codec.decode_ref::<#arg_ty>(&buf) {
                                 Ok(arg) => arg,
                                 Err(_) => {
                                     req.set_rpc_error(razor_rpc::error::RpcIntErr::Decode);

@@ -33,7 +33,7 @@ async fn test_multi_error_service() {
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.as_ref().unwrap().is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    let decoded_resp: MyResp = codec.decode_ref(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 11);
 
     // Test string error
@@ -114,7 +114,7 @@ async fn test_impl_future_service() {
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.as_ref().unwrap().is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    let decoded_resp: MyResp = codec.decode_ref(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 11);
 }
 
@@ -140,7 +140,7 @@ async fn test_async_trait_service() {
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.as_ref().unwrap().is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    let decoded_resp: MyResp = codec.decode_ref(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 20);
 }
 
@@ -166,7 +166,7 @@ async fn test_service_mux_struct() {
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 1);
     assert!(resp.res.as_ref().unwrap().is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    let decoded_resp: MyResp = codec.decode_ref(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 11);
 
     // Test routing to the 'impl_future' service
@@ -181,7 +181,7 @@ async fn test_service_mux_struct() {
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 2);
     assert!(resp.res.as_ref().unwrap().is_ok());
-    let decoded_resp: MyResp = codec.decode(&resp.msg.unwrap()).unwrap();
+    let decoded_resp: MyResp = codec.decode_ref(&resp.msg.unwrap()).unwrap();
     assert_eq!(decoded_resp.result, 21);
 
     // Test unknown service

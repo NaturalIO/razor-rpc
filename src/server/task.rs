@@ -3,7 +3,7 @@
 
 use crate::{Codec, error::*};
 use razor_stream::server::task::{RespNoti, ServerTaskEncode, ServerTaskResp};
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, de::Deserialize};
 use std::fmt;
 use std::io::Write;
 use std::sync::Arc;
@@ -19,8 +19,13 @@ pub struct APIServerReq<C: Codec> {
 
 impl<C: Codec> APIServerReq<C> {
     #[inline]
-    pub fn decode<'a, R: Deserialize<'a>>(&'a mut self, buf: &'a [u8]) -> Result<R, ()> {
-        self.codec.decode::<R>(buf)
+    pub fn decode_arg<'a, R: Deserialize<'a>>(&'a mut self) -> Result<Option<R>, ()> {
+        // XXX currently no used by macro
+        if let Some(req) = &self.req {
+            Ok(Some(self.codec.decode_ref::<R>(req)?))
+        } else {
+            Ok(None)
+        }
     }
 
     #[inline(always)]
