@@ -87,7 +87,7 @@ async fn test_multi_error_service() {
     ServiceStatic::serve(&service_impl, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 5);
-    assert_eq!(resp.res.unwrap().unwrap_err(), EncodedErr::Rpc(RpcIntErr::Method));
+    assert_eq!(resp.res.unwrap().unwrap_err(), RpcIntErr::Method.to_encoded_err());
 }
 
 #[tokio::test]
@@ -193,5 +193,5 @@ async fn test_service_mux_struct() {
     ServiceStatic::serve(&services, req).await;
     let resp = rx.recv().await.unwrap().unwrap();
     assert_eq!(resp.seq, 3);
-    assert_eq!(resp.res.unwrap().unwrap_err(), EncodedErr::Rpc(RpcIntErr::Service));
+    assert_eq!(resp.res.unwrap().unwrap_err(), RpcIntErr::Service.to_encoded_err());
 }
