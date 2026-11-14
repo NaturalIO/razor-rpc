@@ -97,7 +97,7 @@ pub trait ClientTaskDone: Sized + 'static {
     /// Set the custom error Called by RPC transport layer.
     /// the last_index and conf_ver is for FailoverPool callback to original ClientTask
     fn set_custom_error<C: Codec>(
-        &mut self, codec: &C, e: EncodedErr, last_index: usize, conf_ver: u64,
+        &mut self, codec: &C, e: EncodedErr<'_>, last_index: usize, conf_ver: u64,
     );
 
     fn set_rpc_error(&mut self, e: RpcIntErr);

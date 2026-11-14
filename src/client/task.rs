@@ -20,7 +20,7 @@ pub struct APIClientReq {
     /// action is in "Service.method" format
     pub action: String,
     pub resp: Option<Vec<u8>>,
-    pub res: Option<Result<(), EncodedErr>>,
+    pub res: Option<Result<(), EncodedErr<'static>>>,
     pub noti: Option<TxOneshot<Self>>,
     /// route info for FailoverPool
     pub config_ver: u64,
@@ -82,7 +82,6 @@ impl APIClientReq {
                 Ok(e) => Err(RpcError::User(e)),
                 Err(()) => Err(RpcIntErr::Decode.into()),
             },
-            _ => unreachable!(),
         }
     }
 }
@@ -114,10 +113,10 @@ impl ClientTaskDecode for APIClientReq {
 impl ClientTaskDone for APIClientReq {
     #[inline]
     fn set_custom_error<C: Codec>(
-        &mut self, _codec: &C, e: EncodedErr, last_idx: usize, config_ver: u64,
+        &mut self, _codec: &C, e: EncodedErr<'_>, last_idx: usize, config_ver: u64,
     ) {
         // Ignore the Codec, as we don't known the error type yet
-        self.res.replace(Err(e));
+        self.res.replace(Err(e.into_owned()));
         self.config_ver = config_ver;
         self.last_index = last_idx;
     }

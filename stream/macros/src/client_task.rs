@@ -340,18 +340,11 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 
             impl #impl_generics razor_stream::client::task::ClientTaskDone for #struct_name #ty_generics #where_clause_with_into {
                 #[inline]
-                fn set_custom_error<C: razor_stream::Codec>(&mut self, codec: &C, res: razor_stream::error::EncodedErr, _last_index: usize, _conf_ver: u64) {
+                fn set_custom_error<C: razor_stream::Codec>(&mut self, codec: &C, res: razor_stream::error::EncodedErr<'_>, _last_index: usize, _conf_ver: u64) {
                     let rpc_error = match res {
                         razor_stream::error::EncodedErr::Rpc(e) => e.into(),
                         razor_stream::error::EncodedErr::Num(n) => {
                             if let Ok(e) = <#error_type as razor_stream::error::RpcErrCodec>::decode(codec, Ok(n as u32)) {
-                                e.into()
-                            } else {
-                                razor_stream::error::RpcIntErr::Decode.into()
-                            }
-                        }
-                        razor_stream::error::EncodedErr::Static(s) => {
-                            if let Ok(e) = <#error_type as razor_stream::error::RpcErrCodec>::decode(codec, Err(s.as_bytes())) {
                                 e.into()
                             } else {
                                 razor_stream::error::RpcIntErr::Decode.into()
