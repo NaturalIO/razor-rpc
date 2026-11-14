@@ -30,10 +30,14 @@ pub trait ServerTaskDecode<R: Send + 'static>: Send + Sized + 'static {
 
 /// How to encode a server response
 ///
-/// For a server task with any type of buffer, user can always return u8 slice, so the framework
-/// don't need to known the type, but this requires reference and lifetime to the task.
-/// for the returning EncodedErr, it's possible generated during the encode,
-/// Otherwise when existing EncodedErr held in `res` field, the user need to take the res field out of the task.
+/// # Arguments
+///
+/// `codec`: the codec for serialization.
+/// `buf`: the transport layer buffer to serialize the response to.
+///
+/// # Return values
+///
+/// (seq, Result<(serialized_msg_len, optional_resp_blob), EncodedErr>)
 pub trait ServerTaskEncode: Send + 'static {
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
@@ -42,14 +46,15 @@ pub trait ServerTaskEncode: Send + 'static {
 
 /// How to notify Rpc framework when a task is done
 ///
-/// This is not mandatory for the framework, this a guideline,
-/// You can skip this as long as you send the result back to RespNoti.
+/// This is optional for the framework. `#[server_task_enum]` will auto impl this for you.
+///
+/// You can skip this if you send the task back to RespNoti.
 pub trait ServerTaskDone<T, E>: Sized + 'static
 where
     T: Send + 'static,
     E: RpcErrCodec,
 {
-    /// Should implement for enum delegation, not intended for user call
+    /// Should implement for enum macro wrapper, not intended for user call
     fn _set_result(&mut self, res: Result<(), E>) -> RespNoti<T>;
 
     /// For users, set the result in the task and send it back
