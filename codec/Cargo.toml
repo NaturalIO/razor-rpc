@@ -19,6 +19,7 @@ with a low-level streaming interface, and high-level remote API call interface.
 serde = "1"
 rmp-serde = {version=">=1.1.1", optional=true}
 log = "0.4"
+razor-stream = {version=">=0.9.0", path="../stream", default-feature=false}
 
 [features]
 default = []

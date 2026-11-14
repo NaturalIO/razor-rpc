@@ -66,5 +66,18 @@ pub mod client;
 pub mod error;
 pub mod proto;
 pub mod server;
-// re-export for macros, so that user don't need to use multiple crates
-pub use razor_rpc_codec::Codec;
+
+use serde::{Deserialize, Serialize};
+
+/// The codec is immutable, if need changing (like setting up cipher), should have inner
+/// mutablilty
+pub trait Codec: Default + Send + Sync + Sized + 'static {
+    fn encode<T: Serialize>(&self, task: &T) -> Result<Vec<u8>, ()>;
+
+    /// sererialized the msg into buf (with std::io::Writer), and return the size written
+    fn encode_into<T: Serialize, B: crate::buffer::WriteBuf>(
+        &self, task: &T, buf: &mut B,
+    ) -> Result<usize, ()>;
+
+    fn decode<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()>;
+}

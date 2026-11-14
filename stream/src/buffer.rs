@@ -1,5 +1,18 @@
+use std::io::Write;
+
+pub trait WriteBuf: Write {
+    fn len(&self) -> usize;
+}
+
+impl WriteBuf for Vec<u8> {
+    #[inline]
+    fn len(&self) -> usize {
+        Vec::<u8>::len(self)
+    }
+}
+
 /// A trait to adapt various type of buffer
-pub trait AllocateBuf: 'static + Sized + Send {
+pub trait AllocateBuf: 'static + Sized {
     /// Alloc buffer or reserve space to fit blob_len inside the Buffer.
     ///
     /// When size is not enough, return None
@@ -97,10 +110,7 @@ impl AllocateBuf for io_buffer::Buffer {
 }
 
 #[cfg(feature = "smallvec")]
-impl<A: smallvec::Array<Item = u8> + Send + 'static> AllocateBuf for smallvec::SmallVec<A>
-where
-    A::Item: Send,
-{
+impl<A: smallvec::Array<Item = u8> + 'static> AllocateBuf for smallvec::SmallVec<A> {
     #[inline]
     fn reserve(&mut self, blob_len: u32) -> Option<&mut [u8]> {
         let blob_len = blob_len as usize;
@@ -112,5 +122,13 @@ where
             unsafe { self.set_len(blob_len) };
         }
         return Some(self.as_mut());
+    }
+}
+
+#[cfg(feature = "smallvec")]
+impl<A: smallvec::Array<Item = u8> + 'static> WriteBuf for smallvec::SmallVec<A> {
+    #[inline]
+    fn len(&self) -> usize {
+        smallvec::SmallVec::len(self)
     }
 }

@@ -24,7 +24,6 @@ nix = "0"
 thiserror = "2"
 orb = ">=0.11"
 arc-swap = "1"
-razor-rpc-codec = {path="../codec/", version=">=0.3"}
 razor-stream-macros = {path="macros", version=">=0.8"}
 log = { version = "0.4", features = ["std", "kv_unstable"] }
 captains-log = ">=0.15"
@@ -35,7 +34,7 @@ crossfire = ">=3.1"
 futures-util = "0.3"
 ahash = "0.8"
 parking_lot = "0.12"
-smallvec = { version="1", optional=true}
+smallvec = { version="1", optional=true, features=["write"]}
 
 [features]
 default = ["smallvec"]
