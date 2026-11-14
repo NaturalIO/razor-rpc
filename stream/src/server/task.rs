@@ -41,7 +41,7 @@ pub trait ServerTaskDecode<R: Send + 'static>: Send + Sized + 'static {
 pub trait ServerTaskEncode: Send + 'static {
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>);
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>);
 }
 
 /// How to notify Rpc framework when a task is done
@@ -160,7 +160,7 @@ where
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         if let Some(res) = self.res.as_ref() {
             match res {
                 Ok(_) => match codec.encode_into(&self.msg, buf) {
@@ -279,7 +279,7 @@ where
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         if let Some(res) = self.res.as_ref() {
             match res {
                 Ok(_) => {
