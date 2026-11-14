@@ -24,18 +24,19 @@ test-all: test-codec test-stream test-api test-leak test
 	echo run all tests
 
 .PHONY: test-codec
+test-codec: init
 	@echo "test razor-rpc-codec"
 	cargo check -p razor-rpc-codec
 	cargo test -p razor-rpc-codec
 
 .PHONY: test-stream
 test-stream: init
-	@echo "test stream macros"
+	@echo "test stream"
 	cargo test -p razor-stream -- --nocapture
 
 .PHONY: test-api
 test-api: init
-	@echo "test api macros"
+	@echo "test api"
 	RUST_BACKTRACE=1 cargo test -p razor-rpc -- --nocapture
 
 # usage:
