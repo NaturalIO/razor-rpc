@@ -223,7 +223,7 @@ impl From<&str> for RpcError<String> {
 ///     #[inline(always)]
 ///     fn decode<C: Codec>(codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
 ///         if let Err(b) = buf {
-///             return codec.decode(b);
+///             return codec.decode_owned(b);
 ///         } else {
 ///             Err(())
 ///         }

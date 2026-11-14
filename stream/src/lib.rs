@@ -67,7 +67,7 @@ pub mod error;
 pub mod proto;
 pub mod server;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// The codec is immutable, if need changing (like setting up cipher), should have inner
 /// mutablilty
@@ -79,5 +79,7 @@ pub trait Codec: Default + Send + Sync + Sized + 'static {
         &self, task: &T, buf: &mut B,
     ) -> Result<usize, ()>;
 
-    fn decode<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()>;
+    fn decode_ref<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()>;
+
+    fn decode_owned<T: DeserializeOwned>(&self, buf: &[u8]) -> Result<T, ()>;
 }

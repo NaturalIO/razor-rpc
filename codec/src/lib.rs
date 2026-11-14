@@ -6,7 +6,7 @@
 //! This crate provides codec implementations for [`razor-rpc`](https://docs.rs/razor-rpc) and [`razor-stream`](https://docs.rs/razor-stream).
 
 pub use razor_stream::{Codec, buffer::WriteBuf};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[cfg(feature = "msgpack")]
 mod msgpack;
@@ -27,17 +27,21 @@ impl Codec for NullCodec {
     where
         T: Serialize,
     {
-        unreachable!("DummyCodec");
+        unreachable!("NullCodec");
     }
 
     fn encode_into<T: Serialize, B: WriteBuf>(&self, _task: &T, _buf: &mut B) -> Result<usize, ()> {
-        unreachable!("DummyCodec");
+        unreachable!("NullCodec");
     }
 
-    fn decode<'a, T>(&self, _buf: &'a [u8]) -> Result<T, ()>
+    fn decode_ref<'a, T>(&self, _buf: &'a [u8]) -> Result<T, ()>
     where
         T: Deserialize<'a>,
     {
-        unreachable!("DummyCodec");
+        unreachable!("NullCodec");
+    }
+
+    fn decode_owned<T: DeserializeOwned>(&self, _buf: &[u8]) -> Result<T, ()> {
+        unreachable!("NullCodec");
     }
 }

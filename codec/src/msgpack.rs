@@ -1,5 +1,5 @@
 use crate::{Codec, WriteBuf};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Default)]
 pub struct MsgpCodec();
@@ -27,9 +27,22 @@ impl Codec for MsgpCodec {
         }
     }
 
+    // Decode a struct might reference the buffer content
     #[inline(always)]
-    fn decode<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()> {
+    fn decode_ref<'a, T: Deserialize<'a>>(&self, buf: &'a [u8]) -> Result<T, ()> {
         match rmp_serde::decode::from_slice::<T>(buf) {
+            Err(e) => {
+                log::warn!("decode error: {:?}", e);
+                return Err(());
+            }
+            Ok(s) => return Ok(s),
+        }
+    }
+
+    // Decode into a owned struct
+    #[inline(always)]
+    fn decode_owned<T: DeserializeOwned>(&self, buf: &[u8]) -> Result<T, ()> {
+        match rmp_serde::decode::from_read::<_, T>(buf) {
             Err(e) => {
                 log::warn!("decode error: {:?}", e);
                 return Err(());
