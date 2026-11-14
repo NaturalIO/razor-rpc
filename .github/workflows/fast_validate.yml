@@ -21,17 +21,14 @@ jobs:
     - name: clippy 
       run: make clippy
 
-    - name: test core
-      run: make test-core
-
     - name: test codec
       run: make test-codec
 
-    - name: test stream macros
-      run: make test-stream-macros
+    - name: test stream
+      run: make test-stream
 
-    - name: test api macros
-      run: make test-api-macros
+    - name: test api
+      run: make test-api
 
     - name: test smol
       run: make test "basic -F smol"
