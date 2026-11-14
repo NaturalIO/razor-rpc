@@ -338,7 +338,7 @@ impl RespHead {
     }
 
     #[inline(always)]
-    fn _encode_error<'b, L>(logger: &'b L, buf: &'b mut Vec<u8>, seq: u64, e: EncodedErr)
+    fn _encode_error<'a, L>(logger: &'a L, buf: &'a mut Vec<u8>, seq: u64, e: EncodedErr<'a>)
     where
         L: captains_log::filter::Filter,
     {
@@ -364,9 +364,6 @@ impl RespHead {
             }
             EncodedErr::Buf(s) => {
                 write_err!(&s);
-            }
-            EncodedErr::Static(s) => {
-                write_err!(s.as_bytes());
             }
         }
     }
