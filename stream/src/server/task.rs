@@ -14,7 +14,7 @@ use crate::proto::{RpcAction, RpcActionOwned};
 use crate::{Codec, error::*};
 use crossfire::*;
 use io_buffer::Buffer;
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::fmt;
 
 /// Sum up trait for server response task
@@ -128,14 +128,14 @@ where
 impl<T, M, E> ServerTaskDecode<T> for ServerTaskVariant<T, M, E>
 where
     T: Send + 'static,
-    M: for<'b> Deserialize<'b> + Send + 'static,
+    M: DeserializeOwned + Send + 'static,
     E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
         codec: &'a C, action: RpcAction<'a>, seq: u64, msg: &'a [u8], blob: Option<Buffer>,
         noti: RespNoti<T>,
     ) -> Result<Self, ()> {
-        let req = codec.decode(msg)?;
+        let req = codec.decode_owned(msg)?;
         Ok(Self { seq, action: action.into(), msg: req, blob, res: None, noti: Some(noti) })
     }
 }
@@ -235,7 +235,7 @@ where
 impl<T, R, P, E> ServerTaskDecode<T> for ServerTaskVariantFull<T, R, P, E>
 where
     T: Send + 'static,
-    R: for<'b> Deserialize<'b> + Send + 'static,
+    R: DeserializeOwned + Send + 'static,
     P: Send + 'static,
     E: RpcErrCodec,
 {
@@ -243,7 +243,7 @@ where
         codec: &'a C, action: RpcAction<'a>, seq: u64, msg: &'a [u8], blob: Option<Buffer>,
         noti: RespNoti<T>,
     ) -> Result<Self, ()> {
-        let req = codec.decode(msg)?;
+        let req = codec.decode_owned(msg)?;
         Ok(Self {
             seq,
             action: action.into(),
