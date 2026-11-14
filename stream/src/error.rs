@@ -48,12 +48,12 @@
 //! }
 //!
 //! impl RpcErrCodec for MyErrorCode {
-//!     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+//!     fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
 //!         EncodedErr::Num(*self as u32)
 //!     }
 //!
-//!     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-//!         if let Ok(code) = buf {
+//!     fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+//!         if let EncodedErr::Num(code) = e {
 //!             return MyErrorCode::try_from(code).map_err(|_| ());
 //!         }
 //!         Err(())
@@ -68,11 +68,12 @@
 //! ## Approach 2: String Encoding (with strum)
 //!
 //! Use this when you want human-readable error strings that can be serialized/deserialized.
-//! Uses `EncodedErr::Static` to avoid heap allocation during encoding.
+//! Uses `EncodedErr::Buf(Cow::Borrowed)` to avoid heap allocation during encoding.
 //!
 //! ```rust
 //! use razor_stream::{Codec, error::{RpcErrCodec, RpcIntErr, EncodedErr}};
 //! use std::str::FromStr;
+//! use std::borrow::Cow;
 //! use strum::{Display, EnumString, IntoStaticStr};
 //!
 //! #[derive(Debug, Clone, Display, EnumString, IntoStaticStr, PartialEq)]
@@ -86,16 +87,17 @@
 //! }
 //!
 //! impl RpcErrCodec for MyStringError {
-//!     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+//!     fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
 //!         // Use EncodedErr::Static to avoid heap allocation, with the help of strum::IntoStaticStr
-//!         EncodedErr::Static(self.into())
+//!         let s: &'static str = self.into();
+//!         EncodedErr::Buf(Cow::Borrowed(s.as_bytes()))
 //!     }
 //!
-//!     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
+//!     fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
 //!         // Decode with zero-copy: directly parse from &[u8] without allocating
-//!         if let Err(bytes) = buf {
+//!         if let EncodedErr::Buf(bytes) = e {
 //!             // Safety: error strings are valid ASCII (subset of UTF-8), so unchecked is safe
-//!             let s = unsafe { std::str::from_utf8_unchecked(bytes) };
+//!             let s = unsafe { std::str::from_utf8_unchecked(&bytes) };
 //!             // Use strum's EnumString derive to parse from string
 //!             return MyStringError::from_str(s).map_err(|_| ());
 //!         }
@@ -109,6 +111,8 @@
 //! ```
 
 use crate::Codec;
+use bstr::ByteSlice;
+use std::borrow::{Borrow, Cow};
 use std::fmt;
 
 /// "rpc_" prefix is reserved for internal error, you should avoid conflict with it
@@ -205,6 +209,8 @@ impl From<&str> for RpcError<String> {
 /// use serde_derive::{Serialize, Deserialize};
 /// use razor_stream::{Codec, error::{RpcErrCodec, RpcIntErr, EncodedErr}};
 /// use strum::Display;
+/// use std::borrow::Cow;
+///
 /// #[derive(Serialize, Deserialize, Debug)]
 /// pub enum MyError {
 ///     NoSuchFile,
@@ -213,17 +219,17 @@ impl From<&str> for RpcError<String> {
 ///
 /// impl RpcErrCodec for MyError {
 ///     #[inline(always)]
-///     fn encode<C: Codec>(&self, codec: &C) -> EncodedErr {
+///     fn encode<'a, C: Codec>(&'a self, codec: &C) -> EncodedErr<'a> {
 ///         match codec.encode(self) {
-///             Ok(buf)=>EncodedErr::Buf(buf),
-///             Err(())=>EncodedErr::Rpc(RpcIntErr::Encode),
+///             Ok(buf)=>EncodedErr::Buf(Cow::Owned(buf)),
+///             Err(())=>RpcIntErr::Encode.to_encoded_err(),
 ///         }
 ///     }
 ///
 ///     #[inline(always)]
-///     fn decode<C: Codec>(codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-///         if let Err(b) = buf {
-///             return codec.decode_owned(b);
+///     fn decode<C: Codec>(codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+///         if let EncodedErr::Buf(b) = e {
+///             return codec.decode_owned(&b);
 ///         } else {
 ///             Err(())
 ///         }
@@ -258,15 +264,15 @@ impl From<&str> for RpcError<String> {
 ///
 /// impl RpcErrCodec for MyRpcErrorCode {
 ///     #[inline(always)]
-///     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+///     fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
 ///         // Manual conversion to u32 (no IntoPrimitive needed)
 ///         let code: u32 = *self as u32;
 ///         EncodedErr::Num(code)
 ///     }
 ///
 ///     #[inline(always)]
-///     fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-///         if let Ok(code) = buf {
+///     fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+///         if let EncodedErr::Num(code) = e {
 ///             // Using num_enum for safe deserialization (TryFromPrimitive)
 ///             return MyRpcErrorCode::try_from(code).map_err(|_| ());
 ///         }
@@ -280,9 +286,9 @@ impl From<&str> for RpcError<String> {
 /// }
 /// ```
 pub trait RpcErrCodec: Send + Sized + 'static + Unpin {
-    fn encode<C: Codec>(&self, codec: &C) -> EncodedErr;
+    fn encode<'a, C: Codec>(&'a self, codec: &C) -> EncodedErr<'a>;
 
-    fn decode<C: Codec>(codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()>;
+    fn decode<C: Codec>(codec: &C, e: EncodedErr<'_>) -> Result<Self, ()>;
 
     /// You can choose to use std::fmt::Debug or std::fmt::Display for the type.
     ///
@@ -305,23 +311,35 @@ pub trait RpcErrCodec: Send + Sized + 'static + Unpin {
     /// # Example
     /// ```rust
     /// use razor_stream::{Codec, error::{RpcErrCodec, EncodedErr}};
+    /// use std::borrow::Cow;
     ///
     /// #[derive(Debug, Clone, PartialEq)]
     /// pub enum MyError {
     ///     Redirect(String),
-    ///     NotLeader,
+    ///     NoLeader,
     ///     OtherError,
     /// }
     ///
     /// impl RpcErrCodec for MyError {
-    ///     fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
-    ///         // ... encode implementation
-    ///         # EncodedErr::Static("error")
+    ///     fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
+    ///         match self {
+    ///             Self::Redirect(addr)=>EncodedErr::Buf(Cow::from(addr.as_bytes())),
+    ///             Self::NoLeader=>EncodedErr::Buf(Cow::from(b"no_leader")),
+    ///             Self::OtherError=>EncodedErr::Num(0),
+    ///         }
     ///     }
     ///
-    ///     fn decode<C: Codec>(_codec: &C, _buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-    ///         // ... decode implementation
-    ///         # Err(())
+    ///     fn decode<C: Codec>(codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+    ///         match e {
+    ///             EncodedErr::Buf(buf)=>{
+    ///                 if *buf != *b"no_leader" {
+    ///                     Ok(Self::Redirect(String::from_utf8_lossy(&buf).to_string()))
+    ///                 } else {
+    ///                     Ok(Self::NoLeader)
+    ///                 }
+    ///             }
+    ///             EncodedErr::Num(_)=>Ok(Self::OtherError),
+    ///         }
     ///     }
     ///
     ///     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -331,7 +349,7 @@ pub trait RpcErrCodec: Send + Sized + 'static + Unpin {
     ///     fn should_failover(&self) -> Result<Option<&str>, ()> {
     ///         match self {
     ///             Self::Redirect(addr) => Ok(Some(addr)),
-    ///             Self::NotLeader => Ok(None),  // Retry to next node
+    ///             Self::NoLeader => Ok(None),  // Retry to next node
     ///             Self::OtherError => Err(()),  // Don't retry
     ///         }
     ///     }
@@ -347,13 +365,13 @@ macro_rules! impl_rpc_error_for_num {
     ($t: tt) => {
         impl RpcErrCodec for $t {
             #[inline(always)]
-            fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+            fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
                 EncodedErr::Num(*self as u32)
             }
 
             #[inline(always)]
-            fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-                if let Ok(i) = buf {
+            fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+                if let EncodedErr::Num(i) = e {
                     if i <= $t::MAX as u32 {
                         return Ok(i as Self);
                     }
@@ -378,13 +396,13 @@ impl_rpc_error_for_num!(u32);
 
 impl RpcErrCodec for nix::errno::Errno {
     #[inline(always)]
-    fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+    fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
         EncodedErr::Num(*self as u32)
     }
 
     #[inline(always)]
-    fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Ok(i) = buf
+    fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+        if let EncodedErr::Num(i) = e
             && i <= i32::MAX as u32
         {
             return Ok(Self::from_raw(i as i32));
@@ -400,13 +418,13 @@ impl RpcErrCodec for nix::errno::Errno {
 
 impl RpcErrCodec for () {
     #[inline(always)]
-    fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
+    fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
         EncodedErr::Num(0u32)
     }
 
     #[inline(always)]
-    fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Ok(i) = buf
+    fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+        if let EncodedErr::Num(i) = e
             && i == 0
         {
             return Ok(());
@@ -422,13 +440,13 @@ impl RpcErrCodec for () {
 
 impl RpcErrCodec for String {
     #[inline(always)]
-    fn encode<C: Codec>(&self, _codec: &C) -> EncodedErr {
-        EncodedErr::Buf(Vec::from(self.as_bytes()))
+    fn encode<'a, C: Codec>(&'a self, _codec: &C) -> EncodedErr<'a> {
+        EncodedErr::Buf(Cow::from(self.as_bytes()))
     }
     #[inline(always)]
-    fn decode<C: Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Err(s) = buf
-            && let Ok(s) = str::from_utf8(s)
+    fn decode<C: Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+        if let EncodedErr::Buf(s) = e
+            && let Ok(s) = str::from_utf8(&s)
         {
             return Ok(s.to_string());
         }
@@ -451,6 +469,7 @@ impl RpcErrCodec for String {
     strum::Display,
     strum::EnumString,
     strum::AsRefStr,
+    strum::IntoStaticStr,
     PartialEq,
     PartialOrd,
     Clone,
@@ -500,6 +519,12 @@ impl RpcIntErr {
     pub fn as_bytes(&self) -> &[u8] {
         self.as_ref().as_bytes()
     }
+
+    #[inline]
+    pub fn to_encoded_err(&self) -> EncodedErr<'static> {
+        let s: &'static str = self.into();
+        EncodedErr::Buf(Cow::from(s.as_bytes()))
+    }
 }
 
 impl From<std::io::Error> for RpcIntErr {
@@ -510,63 +535,45 @@ impl From<std::io::Error> for RpcIntErr {
 }
 
 /// A container for error message parse from / send into transport
-#[derive(Debug)]
-pub enum EncodedErr {
-    /// The ClientTransport should try the best to parse it from string with "rpc_" prefix
-    Rpc(RpcIntErr),
+pub enum EncodedErr<'a> {
     /// For nix errno and the like
     Num(u32),
     /// Only for server-side to encode err.
     ///
-    /// The ClientTransport cannot decode into static type
-    Static(&'static str),
     /// The ClientTransport will fallback to `Vec<u8>` after try to parse  RpcIntErr and  num
-    Buf(Vec<u8>),
+    Buf(Cow<'a, [u8]>),
 }
 
-impl EncodedErr {
+impl<'a> EncodedErr<'a> {
     #[inline]
-    pub fn try_as_str(&self) -> Result<&str, ()> {
+    pub fn as_ref(&'a self) -> Self {
         match self {
-            Self::Static(s) => return Ok(s),
-            Self::Buf(b) => {
-                if let Ok(s) = str::from_utf8(b) {
-                    return Ok(s);
-                }
-            }
-            _ => {}
+            Self::Num(n) => Self::Num(*n),
+            Self::Buf(b) => Self::Buf(Cow::Borrowed(b.borrow())),
         }
-        Err(())
+    }
+
+    #[inline]
+    pub fn into_owned(self) -> EncodedErr<'static> {
+        match self {
+            Self::Num(n) => EncodedErr::Num(n),
+            Self::Buf(b) => EncodedErr::Buf(Cow::Owned(b.into_owned())),
+        }
     }
 }
 
 /// Just for macro test
-impl std::cmp::PartialEq<EncodedErr> for EncodedErr {
-    fn eq(&self, other: &EncodedErr) -> bool {
+impl<'a> std::cmp::PartialEq<EncodedErr<'a>> for EncodedErr<'a> {
+    fn eq(&self, other: &EncodedErr<'a>) -> bool {
         match self {
-            Self::Rpc(e) => {
-                if let Self::Rpc(o) = other {
-                    return e == o;
-                }
-            }
             Self::Num(e) => {
                 if let Self::Num(o) = other {
                     return e == o;
                 }
             }
-            Self::Static(s) => {
-                if let Ok(o) = other.try_as_str() {
-                    return *s == o;
-                }
-            }
             Self::Buf(s) => {
                 if let Self::Buf(o) = other {
                     return s == o;
-                } else if let Ok(o) = other.try_as_str() {
-                    // other's type is not Buf
-                    if let Ok(_s) = str::from_utf8(s) {
-                        return _s == o;
-                    }
                 }
             }
         }
@@ -574,28 +581,21 @@ impl std::cmp::PartialEq<EncodedErr> for EncodedErr {
     }
 }
 
-impl fmt::Display for EncodedErr {
+impl<'a> fmt::Display for EncodedErr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Rpc(e) => e.fmt(f),
-            Self::Num(no) => write!(f, "errno {}", no),
-            Self::Static(s) => write!(f, "{}", s),
-            Self::Buf(b) => match str::from_utf8(b) {
-                Ok(s) => {
-                    write!(f, "{}", s)
-                }
-                Err(_) => {
-                    write!(f, "err blob {} length", b.len())
-                }
-            },
+            Self::Num(no) => write!(f, "{}", no),
+            Self::Buf(b) => {
+                write!(f, "{}", b.as_bstr())
+            }
         }
     }
 }
 
-impl From<RpcIntErr> for EncodedErr {
-    #[inline(always)]
-    fn from(e: RpcIntErr) -> Self {
-        Self::Rpc(e)
+impl<'a> fmt::Debug for EncodedErr<'a> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 

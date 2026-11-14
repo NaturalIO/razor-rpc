@@ -126,15 +126,15 @@ pub struct RpcSvrResp {
 
     pub blob: Option<Buffer>,
 
-    pub res: Option<Result<(), EncodedErr>>,
+    pub res: Option<Result<(), EncodedErr<'static>>>,
 }
 
 impl task::ServerTaskEncode for RpcSvrResp {
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, _codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
-        match self.res.take().unwrap() {
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
+        match self.res.as_ref().unwrap() {
             Ok(_) => {
                 if let Some(msg) = self.msg.as_ref() {
                     use std::io::Write;
@@ -144,7 +144,7 @@ impl task::ServerTaskEncode for RpcSvrResp {
                     return (self.seq, Ok((0, self.blob.as_deref())));
                 }
             }
-            Err(e) => return (self.seq, Err(e)),
+            Err(e) => return (self.seq, Err(e.as_ref())),
         }
     }
 }

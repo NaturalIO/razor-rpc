@@ -226,6 +226,7 @@ For services with leader-follower architecture (e.g., distributed KV store, Raft
 use razor_rpc::client::{endpoint_client, endpoint_async, APIFact, APIFailoverPool, ClientConfig};
 use razor_rpc::error::{RpcErrCodec, RpcError, EncodedErr};
 use razor_rpc_tcp::{TcpClient, TcpServer};
+use std::borrow::Cow;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -245,20 +246,19 @@ pub enum ClusterErr {
 impl RpcErrCodec for ClusterErr {
     fn encode<C: razor_rpc::Codec>(&self, _codec: &C) -> EncodedErr {
         match self {
-            Self::Redirect(addr) => EncodedErr::Buf(format!("{}{}", REDIRECT_PREFIX, addr).into_bytes()),
-            Self::RetryNext => EncodedErr::Static("retry_next"),
-            Self::Internal => EncodedErr::Static("internal"),
+            Self::Redirect(addr) => EncodedErr::Buf(Cow::from(format!("{}{}", REDIRECT_PREFIX, addr).into_bytes())),
+            Self::RetryNext => EncodedErr::Buf(Cow::from(b"retry_next")),
+            Self::Internal => EncodedErr::Buf(Cow::from(b"internal")),
         }
     }
 
-    fn decode<C: razor_rpc::Codec>(_codec: &C, buf: Result<u32, &[u8]>) -> Result<Self, ()> {
-        if let Err(bytes) = buf {
-            let s = unsafe { std::str::from_utf8_unchecked(bytes) };
-            if s.starts_with(REDIRECT_PREFIX) {
-                Ok(Self::Redirect(s[REDIRECT_PREFIX.len()..].to_string()))
-            } else if s == "retry_next" {
+    fn decode<C: razor_rpc::Codec>(_codec: &C, e: EncodedErr<'_>) -> Result<Self, ()> {
+        if let EncodedErr::Buf(buf) = e {
+            if buf.starts_with(REDIRECT_PREFIX.as_bytes()) {
+                Ok(Self::Redirect(String::from_utf8_lossy(&buf[REDIRECT_PREFIX.len()..]).to_string()))
+            } else if *buf == *b"retry_next" {
                 Ok(Self::RetryNext)
-            } else if s == "internal" {
+            } else if *buf == *b"internal" {
                 Ok(Self::Internal)
             } else {
                 Err(())

@@ -41,7 +41,7 @@ pub trait ServerTaskDecode<R: Send + 'static>: Send + Sized + 'static {
 pub trait ServerTaskEncode: Send + 'static {
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>);
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>);
 }
 
 /// How to notify Rpc framework when a task is done
@@ -160,12 +160,12 @@ where
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         if let Some(res) = self.res.as_ref() {
             match res {
                 Ok(_) => match codec.encode_into(&self.msg, buf) {
                     Err(_) => {
-                        return (self.seq, Err(RpcIntErr::Encode.into()));
+                        return (self.seq, Err(RpcIntErr::Encode.to_encoded_err()));
                     }
                     Ok(msg_len) => {
                         return (self.seq, Ok((msg_len, self.blob.as_deref())));
@@ -279,14 +279,14 @@ where
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         if let Some(res) = self.res.as_ref() {
             match res {
                 Ok(_) => {
                     if let Some(resp) = self.resp.as_ref() {
                         match codec.encode_into(resp, buf) {
                             Err(_) => {
-                                return (self.seq, Err(RpcIntErr::Encode.into()));
+                                return (self.seq, Err(RpcIntErr::Encode.to_encoded_err()));
                             }
                             Ok(msg_len) => {
                                 return (self.seq, Ok((msg_len, self.resp_blob.as_deref())));

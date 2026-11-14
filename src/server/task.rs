@@ -35,7 +35,7 @@ impl<C: Codec> APIServerReq<C> {
                 self.noti.done(APIServerResp {
                     seq: self.seq,
                     msg: None,
-                    res: Some(Err(RpcIntErr::Encode.into())),
+                    res: Some(Err(RpcIntErr::Encode.to_encoded_err())),
                 });
             }
             Ok(msg) => {
@@ -46,14 +46,18 @@ impl<C: Codec> APIServerReq<C> {
 
     #[inline(always)]
     pub fn set_rpc_error(self, e: RpcIntErr) {
-        self.noti.done(APIServerResp { seq: self.seq, msg: None, res: Some(Err(e.into())) });
+        self.noti.done(APIServerResp {
+            seq: self.seq,
+            msg: None,
+            res: Some(Err(e.to_encoded_err())),
+        });
     }
 
     #[inline(always)]
     pub fn set_error<E: RpcErrCodec>(self, e: RpcError<E>) {
         let encoded_err = match e {
-            RpcError::Rpc(rpc_int_err) => rpc_int_err.into(),
-            RpcError::User(user_err) => user_err.encode(self.codec.as_ref()),
+            RpcError::Rpc(rpc_int_err) => rpc_int_err.to_encoded_err(),
+            RpcError::User(user_err) => user_err.encode(self.codec.as_ref()).into_owned(),
         };
         self.noti.done(APIServerResp { seq: self.seq, msg: None, res: Some(Err(encoded_err)) });
     }
@@ -62,7 +66,7 @@ impl<C: Codec> APIServerReq<C> {
 pub struct APIServerResp {
     pub seq: u64,
     pub msg: Option<Vec<u8>>,
-    pub res: Option<Result<(), EncodedErr>>,
+    pub res: Option<Result<(), EncodedErr<'static>>>,
 }
 
 impl fmt::Debug for APIServerResp {
@@ -75,8 +79,8 @@ impl ServerTaskEncode for APIServerResp {
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, _codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr>) {
-        match self.res.take().unwrap() {
+    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
+        match self.res.as_ref().unwrap() {
             Ok(()) => {
                 if let Some(msg) = self.msg.as_ref() {
                     buf.write_all(msg).expect("fill msg buf");
@@ -85,7 +89,7 @@ impl ServerTaskEncode for APIServerResp {
                     (self.seq, Ok((0, None)))
                 }
             }
-            Err(e) => (self.seq, Err(e)),
+            Err(e) => (self.seq, Err(e.as_ref())),
         }
     }
 }

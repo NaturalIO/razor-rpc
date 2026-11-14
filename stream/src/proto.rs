@@ -296,19 +296,12 @@ impl RespHead {
                         return (seq, o_blob);
                     } else {
                         error!("write_resp: blob len {} exceed i32 limit", blob_len);
-                        Self::_encode_error::<L>(
-                            logger,
-                            buf,
-                            seq,
-                            EncodedErr::Rpc(RpcIntErr::Encode),
-                        );
-                        return (seq, None);
                     }
                 } else {
                     error!("write_resp: encoded msg len {} exceed u32 limit", msg_len);
-                    Self::_encode_error::<L>(logger, buf, seq, EncodedErr::Rpc(RpcIntErr::Encode));
-                    return (seq, None);
                 }
+                Self::_encode_error::<L>(logger, buf, seq, RpcIntErr::Encode.to_encoded_err());
+                return (seq, None);
             }
             Err(e) => {
                 Self::_encode_error::<L>(logger, buf, seq, e);
@@ -328,7 +321,7 @@ impl RespHead {
         // Leave a room at the beginning of buffer for RespHead
         unsafe { buf.set_len(RPC_RESP_HEADER_LEN) };
         if let Some(e) = err {
-            Self::_encode_error::<L>(logger, buf, seq, e.into());
+            Self::_encode_error::<L>(logger, buf, seq, e.to_encoded_err());
             return seq;
         } else {
             // ping
@@ -338,7 +331,7 @@ impl RespHead {
     }
 
     #[inline(always)]
-    fn _encode_error<'b, L>(logger: &'b L, buf: &'b mut Vec<u8>, seq: u64, e: EncodedErr)
+    fn _encode_error<'a, L>(logger: &'a L, buf: &'a mut Vec<u8>, seq: u64, e: EncodedErr<'a>)
     where
         L: captains_log::filter::Filter,
     {
@@ -359,14 +352,8 @@ impl RespHead {
             EncodedErr::Num(n) => {
                 Self::_write_head::<L>(logger, buf, RESP_FLAG_HAS_ERRNO, seq, n, 0);
             }
-            EncodedErr::Rpc(s) => {
-                write_err!(s.as_bytes());
-            }
             EncodedErr::Buf(s) => {
                 write_err!(&s);
-            }
-            EncodedErr::Static(s) => {
-                write_err!(s.as_bytes());
             }
         }
     }

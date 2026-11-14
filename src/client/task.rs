@@ -20,12 +20,17 @@ pub struct APIClientReq {
     /// action is in "Service.method" format
     pub action: String,
     pub resp: Option<Vec<u8>>,
-    pub res: Option<Result<(), EncodedErr>>,
+    res: Option<Result<(), RawError>>,
     pub noti: Option<TxOneshot<Self>>,
     /// route info for FailoverPool
     pub config_ver: u64,
     /// Routing info for FailoverPool
     pub last_index: usize,
+}
+
+enum RawError {
+    Rpc(RpcIntErr),
+    Custom(EncodedErr<'static>),
 }
 
 impl APIClientReq {
@@ -73,16 +78,11 @@ impl APIClientReq {
                     Ok(Resp::default())
                 }
             }
-            Err(EncodedErr::Rpc(e)) => Err(RpcError::Rpc(e)),
-            Err(EncodedErr::Num(n)) => match E::decode(codec, Ok(n)) {
+            Err(RawError::Rpc(e)) => Err(RpcError::Rpc(e)),
+            Err(RawError::Custom(n)) => match E::decode(codec, n.as_ref()) {
                 Ok(e) => Err(RpcError::User(e)),
                 Err(()) => Err(RpcIntErr::Decode.into()),
             },
-            Err(EncodedErr::Buf(buf)) => match E::decode(codec, Err(&buf)) {
-                Ok(e) => Err(RpcError::User(e)),
-                Err(()) => Err(RpcIntErr::Decode.into()),
-            },
-            _ => unreachable!(),
         }
     }
 }
@@ -114,17 +114,17 @@ impl ClientTaskDecode for APIClientReq {
 impl ClientTaskDone for APIClientReq {
     #[inline]
     fn set_custom_error<C: Codec>(
-        &mut self, _codec: &C, e: EncodedErr, last_idx: usize, config_ver: u64,
+        &mut self, _codec: &C, e: EncodedErr<'_>, last_idx: usize, config_ver: u64,
     ) {
         // Ignore the Codec, as we don't known the error type yet
-        self.res.replace(Err(e));
+        self.res.replace(Err(RawError::Custom(e.into_owned())));
         self.config_ver = config_ver;
         self.last_index = last_idx;
     }
 
     #[inline]
     fn set_rpc_error(&mut self, e: RpcIntErr) {
-        self.res.replace(Err(e.into()));
+        self.res.replace(Err(RawError::Rpc(e)));
     }
 
     #[inline]

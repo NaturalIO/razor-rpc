@@ -9,6 +9,7 @@ use razor_stream::client::timer::ClientTaskTimer;
 use razor_stream::client::{ClientConfig, ClientFacts, ClientTransport};
 use razor_stream::error::*;
 use razor_stream::proto;
+use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::mem::transmute;
 use std::str::FromStr;
@@ -98,7 +99,12 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
                             }
                         }
                         // In the transport layer, we don't have routing info for last_index/conf_ver
-                        task.set_custom_error(codec, EncodedErr::Buf(buf.clone()), 0, 0);
+                        task.set_custom_error(
+                            codec,
+                            EncodedErr::Buf(Cow::Borrowed(buf.as_ref())),
+                            0,
+                            0,
+                        );
                         facts.error_handle(task);
                         return Ok(());
                     }
