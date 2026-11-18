@@ -57,7 +57,10 @@ impl Default for ClientConfig {
 }
 
 /// A trait implemented by the user for the client-side, to define the customizable plugin.
-pub trait ClientFacts: Send + Sync + Sized + 'static {
+///
+/// NOTE: [ClientPool](crate::client::ClientPool) require ClientFacts to be cloneable.
+/// It's Ok to use Arc or impl Clone for simple struct.
+pub trait ClientFacts: Send + Sync + Sized + 'static + Clone {
     /// Define the codec to serialization and deserialization
     ///
     /// Refers to [Codec]
@@ -184,9 +187,16 @@ pub struct ClientDefault<T: ClientTask, C: Codec> {
     _phan: std::marker::PhantomData<fn(&C, &T)>,
 }
 
+impl<T: ClientTask, C: Codec> Clone for ClientDefault<T, C> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { logger: self.logger.clone(), config: self.config.clone(), _phan: Default::default() }
+    }
+}
+
 impl<T: ClientTask, C: Codec> ClientDefault<T, C> {
-    pub fn new(config: ClientConfig) -> Arc<Self> {
-        Arc::new(Self { logger: Arc::new(LogFilter::new()), config, _phan: Default::default() })
+    pub fn new(config: ClientConfig) -> Self {
+        Self { logger: Arc::new(LogFilter::new()), config, _phan: Default::default() }
     }
 
     #[inline]

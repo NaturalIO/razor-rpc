@@ -38,9 +38,21 @@ where
     F: ClientFacts,
 {
     retry_tx: MTx<mpsc::List<FailoverTask<F::Task>>>,
-    facts: Arc<F>,
+    facts: F,
     logger: F::Logger,
     retry_limit: usize,
+}
+
+impl<F: ClientFacts> Clone for FailoverFacts<F> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            retry_tx: self.retry_tx.clone(),
+            logger: self.facts.new_logger(),
+            facts: self.facts.clone(),
+            retry_limit: self.retry_limit,
+        }
+    }
 }
 
 struct FailoverPoolInner<F, P>
@@ -55,7 +67,7 @@ where
     /// - In stateful mode: used as the current leader index
     next_node: AtomicUsize,
     pool_channel_size: usize,
-    facts: Arc<FailoverFacts<F>>,
+    facts: FailoverFacts<F>,
     /// Mutex to protect concurrent pool addition
     add_pool_mutex: Mutex<()>,
     rt: Option<<P::RT as AsyncRuntime>::Exec>,
@@ -84,13 +96,13 @@ where
     /// - `stateless`:  When true, all addresses in the pool will be selected with equal chance (round-robin);
     ///   When  false, the leader address will always be picked unless error happens.
     pub fn new(
-        facts: Arc<F>, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addrs: Vec<String>,
-        stateless: bool, retry_limit: usize, pool_channel_size: usize,
+        facts: F, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addrs: Vec<String>, stateless: bool,
+        retry_limit: usize, pool_channel_size: usize,
     ) -> Self {
         let (retry_tx, retry_rx) = mpsc::unbounded_async();
         let retry_logger = facts.new_logger();
         let wrapped_facts =
-            Arc::new(FailoverFacts { retry_limit, retry_tx, logger: facts.new_logger(), facts });
+            FailoverFacts { retry_limit, retry_tx, logger: facts.new_logger(), facts };
         let mut pools = Vec::with_capacity(addrs.len());
         for addr in addrs.iter() {
             let pool = ConnPool::new(wrapped_facts.clone(), rt, addr, pool_channel_size);
@@ -335,7 +347,7 @@ where
                 task.done();
             }
         }
-        logger_trace!(logger, "FailoverPool retry worker exit");
+        trace!("FailoverPool retry worker exit");
     }
 }
 
@@ -359,7 +371,7 @@ where
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        self.facts.as_ref()
+        &self.facts
     }
 }
 

@@ -45,7 +45,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
     /// Make a streaming connection to the server, returns [ClientStream] on success
     #[inline]
     pub async fn connect(
-        facts: Arc<F>, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addr: &str, conn_id: &str,
+        facts: F, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addr: &str, conn_id: &str,
         last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Result<Self, RpcIntErr> {
         let client_id = facts.get_client_id();
@@ -63,8 +63,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
 
     #[inline]
     fn new(
-        facts: Arc<F>, conn: P, client_id: u64, conn_id: String,
-        last_resp_ts: Option<Arc<AtomicU64>>,
+        facts: F, conn: P, client_id: u64, conn_id: String, last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Self {
         let (_close_tx, _close_rx) = mpsc::new::<mpsc::Null, _, _>();
         let inner = Arc::new(ClientStreamInner::new(
@@ -177,7 +176,7 @@ struct ClientStreamInner<F: ClientFacts, P: ClientTransport> {
     encode_buf: UnsafeCell<Vec<u8>>,
     codec: F::Codec,
     logger: F::Logger,
-    facts: Arc<F>,
+    facts: F,
 }
 
 unsafe impl<F: ClientFacts, P: ClientTransport> Send for ClientStreamInner<F, P> {}
@@ -192,7 +191,7 @@ impl<F: ClientFacts, P: ClientTransport> fmt::Debug for ClientStreamInner<F, P> 
 
 impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     pub fn new(
-        facts: Arc<F>, conn: P, client_id: u64, conn_id: String, close_rx: AsyncRx<mpsc::Null>,
+        facts: F, conn: P, client_id: u64, conn_id: String, close_rx: AsyncRx<mpsc::Null>,
         last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Self {
         let config = facts.get_config();
@@ -374,10 +373,8 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                     return Err(RpcIntErr::IO);
                 }
                 // When ClientStream(sender) dropped, receiver will be timer
-                if let Err(_e) = self
-                    .conn
-                    .read_resp(self.facts.as_ref(), &self.logger, &self.codec, None, timer)
-                    .await
+                if let Err(_e) =
+                    self.conn.read_resp(&self.facts, &self.logger, &self.codec, None, timer).await
                 {
                     self.closed.store(true, Ordering::SeqCst);
                     return Err(RpcIntErr::IO);
@@ -389,7 +386,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                 match self
                     .conn
                     .read_resp(
-                        self.facts.as_ref(),
+                        &self.facts,
                         &self.logger,
                         &self.codec,
                         Some(self.get_close_rx()),
@@ -424,13 +421,13 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
                     logger_debug!(self.logger, "{:?} receive_loop error: {}", self, e);
                     self.closed.store(true, Ordering::SeqCst);
                     let timer = self.get_timer_mut();
-                    timer.clean_pending_tasks(self.facts.as_ref());
+                    timer.clean_pending_tasks(&self.facts);
                     // If pending_task_count > 0 means some tasks may still remain in the pending chan
                     while timer.pending_task_count_ref().load(Ordering::SeqCst) > 0 {
                         // After the 'closed' flag has taken effect,
                         // pending_task_count will not keep growing,
                         // so there is no need to sleep here.
-                        timer.clean_pending_tasks(self.facts.as_ref());
+                        timer.clean_pending_tasks(&self.facts);
                         <P::RT as AsyncTime>::sleep(Duration::from_secs(1)).await;
                     }
                     return;
@@ -448,7 +445,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
             self.throttler.get_inflight_count()
         );
         let timer = self.get_timer_mut();
-        timer.adjust_task_queue(self.facts.as_ref());
+        timer.adjust_task_queue(&self.facts);
         return;
     }
 
@@ -461,7 +458,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
 impl<F: ClientFacts, P: ClientTransport> Drop for ClientStreamInner<F, P> {
     fn drop(&mut self) {
         let timer = self.get_timer_mut();
-        timer.clean_pending_tasks(self.facts.as_ref());
+        timer.clean_pending_tasks(&self.facts);
     }
 }
 

@@ -45,7 +45,7 @@ impl<F: ClientFacts, P: ClientTransport> Clone for ConnPool<F, P> {
 }
 
 struct ConnPoolInner<F: ClientFacts, P: ClientTransport> {
-    facts: Arc<F>,
+    facts: F,
     logger: F::Logger,
     rx: MAsyncRx<mpmc::Array<F::Task>>,
     addr: String,
@@ -69,8 +69,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
     /// - `rt`: When we are in orb async context, just pass None, otherwise (in thread context),
     ///   pass the AsyncRuntime::Exec.
     pub fn new(
-        facts: Arc<F>, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addr: &str,
-        mut channel_size: usize,
+        facts: F, rt: Option<&<P::RT as AsyncRuntime>::Exec>, addr: &str, mut channel_size: usize,
     ) -> Self {
         let config = facts.get_config();
         if config.thresholds > 0 {
@@ -85,7 +84,7 @@ impl<F: ClientFacts, P: ClientTransport> ConnPool<F, P> {
         let conn_id = format!("to {}", addr);
         let inner = Arc::new(ConnPoolInner {
             logger: facts.new_logger(),
-            facts: facts.clone(),
+            facts,
             rx,
             addr: addr.to_string(),
             conn_id,

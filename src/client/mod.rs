@@ -20,12 +20,19 @@ pub struct APIFact<C: Codec> {
     _phan: std::marker::PhantomData<fn(&C)>,
 }
 
+impl<C: Codec> Clone for APIFact<C> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self { logger: self.logger.clone(), config: self.config.clone(), _phan: Default::default() }
+    }
+}
+
 pub type APIConnPool<C, P> = ConnPool<APIFact<C>, P>;
 pub type APIFailoverPool<C, P> = FailoverPool<APIFact<C>, P>;
 
 impl<C: Codec> APIFact<C> {
-    pub fn new(config: ClientConfig) -> Arc<Self> {
-        Arc::new(Self { logger: Arc::new(LogFilter::new()), config, _phan: Default::default() })
+    pub fn new(config: ClientConfig) -> Self {
+        Self { logger: Arc::new(LogFilter::new()), config, _phan: Default::default() }
     }
 
     #[inline]
@@ -34,16 +41,16 @@ impl<C: Codec> APIFact<C> {
     }
 
     pub fn new_conn_pool<P: ClientTransport>(
-        self: Arc<Self>, rt: Option<&<P::RT as orb::AsyncRuntime>::Exec>, addr: &str,
+        self, rt: Option<&<P::RT as orb::AsyncRuntime>::Exec>, addr: &str,
     ) -> APIConnPool<C, P> {
-        ConnPool::<APIFact<C>, P>::new(self.clone(), rt, addr, 0)
+        ConnPool::<APIFact<C>, P>::new(self, rt, addr, 0)
     }
 
     pub fn new_failover<P: ClientTransport>(
-        self: Arc<Self>, rt: Option<&<P::RT as orb::AsyncRuntime>::Exec>, addrs: Vec<String>,
-        stateless: bool, retry_limit: usize,
+        self, rt: Option<&<P::RT as orb::AsyncRuntime>::Exec>, addrs: Vec<String>, stateless: bool,
+        retry_limit: usize,
     ) -> APIFailoverPool<C, P> {
-        FailoverPool::<APIFact<C>, P>::new(self.clone(), rt, addrs, stateless, retry_limit, 0)
+        FailoverPool::<APIFact<C>, P>::new(self, rt, addrs, stateless, retry_limit, 0)
     }
 }
 
