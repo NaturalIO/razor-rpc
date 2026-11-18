@@ -1,4 +1,3 @@
-use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, mpsc};
 use io_buffer::Buffer;
 use orb::net::UnifyStream;
@@ -72,7 +71,7 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
 
     #[inline]
     async fn _recv_error<F: ClientFacts>(
-        &self, facts: &F, logger: &LogFilter, codec: &F::Codec, resp_head: &proto::RespHead,
+        &self, facts: &F, logger: &F::Logger, codec: &F::Codec, resp_head: &proto::RespHead,
         mut task: F::Task,
     ) -> io::Result<()> {
         log_debug_assert!(resp_head.flag > 0);
@@ -122,7 +121,7 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
 
     #[inline]
     async fn _recv_resp_body<F: ClientFacts>(
-        &self, facts: &F, logger: &LogFilter, codec: &F::Codec, task_reg: &mut ClientTaskTimer<F>,
+        &self, facts: &F, logger: &F::Logger, codec: &F::Codec, task_reg: &mut ClientTaskTimer<F>,
         resp_head: &proto::RespHead,
     ) -> io::Result<()> {
         let reader = self.get_stream_mut();
@@ -240,7 +239,7 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     }
 
     #[inline(always)]
-    async fn close_conn<F: ClientFacts>(&self, logger: &LogFilter) {
+    async fn close_conn<F: ClientFacts>(&self, logger: &F::Logger) {
         if self.flush_req::<F>(logger).await.is_ok() {
             // stream close is just shutdown on sending, receiver might not be notified on peer dead
             let stream = self.get_stream_mut();
@@ -249,7 +248,7 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     }
 
     #[inline(always)]
-    async fn flush_req<F: ClientFacts>(&self, logger: &LogFilter) -> io::Result<()> {
+    async fn flush_req<F: ClientFacts>(&self, logger: &F::Logger) -> io::Result<()> {
         let writer = self.get_stream_mut();
         match crate::io_with_timeout!(RT, self.write_timeout, writer.flush()) {
             Ok(()) => {
@@ -265,7 +264,7 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
 
     #[inline(always)]
     async fn write_req<'a, F: ClientFacts>(
-        &'a self, logger: &LogFilter, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
+        &'a self, logger: &F::Logger, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
     ) -> io::Result<()> {
         let writer = self.get_stream_mut();
         crate::io_with_timeout!(RT, self.write_timeout, writer.write_all(buf))?;
@@ -289,7 +288,7 @@ impl<RT: AsyncRuntime> ClientTransport for TcpClient<RT> {
     /// return false to indicate aborted by close_f
     #[inline]
     async fn read_resp<F: ClientFacts>(
-        &self, facts: &F, logger: &LogFilter, codec: &F::Codec,
+        &self, facts: &F, logger: &F::Logger, codec: &F::Codec,
         close_ch: Option<&mut AsyncRx<mpsc::Null>>, task_reg: &mut ClientTaskTimer<F>,
     ) -> Result<bool, RpcIntErr> {
         let mut resp_head_buf = [0u8; proto::RPC_RESP_HEADER_LEN];

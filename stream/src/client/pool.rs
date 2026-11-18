@@ -3,7 +3,6 @@ use crate::client::{
     ClientCaller, ClientCallerBlocking, ClientFacts, ClientTransport, task::ClientTaskDone,
 };
 use crate::error::RpcIntErr;
-use captains_log::filter::LogFilter;
 use crossfire::{MAsyncRx, MAsyncTx, MTx, RecvTimeoutError, mpmc};
 use orb::prelude::{AsyncExec, AsyncRuntime, AsyncTime};
 use std::fmt;
@@ -47,7 +46,7 @@ impl<F: ClientFacts, P: ClientTransport> Clone for ConnPool<F, P> {
 
 struct ConnPoolInner<F: ClientFacts, P: ClientTransport> {
     facts: Arc<F>,
-    logger: Arc<LogFilter>,
+    logger: F::Logger,
     rx: MAsyncRx<mpmc::Array<F::Task>>,
     addr: String,
     conn_id: String,

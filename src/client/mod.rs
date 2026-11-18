@@ -50,6 +50,7 @@ impl<C: Codec> APIFact<C> {
 impl<C: Codec> ClientFacts for APIFact<C> {
     type Codec = C;
     type Task = APIClientReq;
+    type Logger = Arc<LogFilter>;
 
     #[inline]
     fn new_logger(&self) -> Arc<LogFilter> {

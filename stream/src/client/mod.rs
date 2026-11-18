@@ -1,7 +1,7 @@
 //! The module contains traits defined for the client-side
 
 use crate::{Codec, error::RpcIntErr};
-use captains_log::filter::LogFilter;
+use captains_log::filter::{Filter, LogFilter};
 use crossfire::{AsyncRx, mpsc};
 use orb::AsyncRuntime;
 use std::future::Future;
@@ -71,13 +71,14 @@ pub trait ClientFacts: Send + Sync + Sized + 'static {
     /// You can use macro [client_task_enum](crate::client::task::client_task_enum) and [client_task](crate::client::task::client_task) on task type
     type Task: ClientTask;
 
+    /// A type of captains_log::filter:LogFiler to switch log level dynamically
+    type Logger: Filter + Send + Sync;
+
     /// You should keep ClientConfig inside, get_config() will return the reference.
     fn get_config(&self) -> &ClientConfig;
 
     /// Construct a [captains_log::filter::Filter](https://docs.rs/captains-log/latest/captains_log/filter/trait.Filter.html) to oganize log of a client
-    ///
-    /// TODO: Fix the logger interface
-    fn new_logger(&self) -> Arc<LogFilter>;
+    fn new_logger(&self) -> Self::Logger;
 
     /// How to deal with error
     ///
@@ -157,21 +158,21 @@ pub trait ClientTransport: fmt::Debug + Send + Sized + 'static {
     ) -> impl Future<Output = Result<Self, RpcIntErr>> + Send;
 
     /// Shutdown the write direction of the connection
-    fn close_conn<F: ClientFacts>(&self, logger: &LogFilter) -> impl Future<Output = ()> + Send;
+    fn close_conn<F: ClientFacts>(&self, logger: &F::Logger) -> impl Future<Output = ()> + Send;
 
     /// Flush the request for the socket writer, if the transport has buffering logic
     fn flush_req<F: ClientFacts>(
-        &self, logger: &LogFilter,
+        &self, logger: &F::Logger,
     ) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Write out the encoded request task
     fn write_req<'a, F: ClientFacts>(
-        &'a self, logger: &LogFilter, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
+        &'a self, logger: &F::Logger, buf: &'a [u8], blob: Option<&'a [u8]>, need_flush: bool,
     ) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Read the response and decode it from the socket, find and notify the registered ClientTask
     fn read_resp<F: ClientFacts>(
-        &self, facts: &F, logger: &LogFilter, codec: &F::Codec,
+        &self, facts: &F, logger: &F::Logger, codec: &F::Codec,
         close_ch: Option<&mut AsyncRx<mpsc::Null>>, task_reg: &mut ClientTaskTimer<F>,
     ) -> impl std::future::Future<Output = Result<bool, RpcIntErr>> + Send;
 }
@@ -197,6 +198,8 @@ impl<T: ClientTask, C: Codec> ClientDefault<T, C> {
 impl<T: ClientTask, C: Codec> ClientFacts for ClientDefault<T, C> {
     type Codec = C;
     type Task = T;
+
+    type Logger = Arc<LogFilter>;
 
     #[inline]
     fn new_logger(&self) -> Arc<LogFilter> {

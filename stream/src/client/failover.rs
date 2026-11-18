@@ -9,7 +9,6 @@ use crate::{
 };
 use ahash::AHashMap;
 use arc_swap::ArcSwap;
-use captains_log::filter::LogFilter;
 use crossfire::{AsyncRx, MTx, SendError, mpsc};
 use orb::prelude::{AsyncExec, AsyncRuntime};
 use parking_lot::Mutex;
@@ -40,7 +39,7 @@ where
 {
     retry_tx: MTx<mpsc::List<FailoverTask<F::Task>>>,
     facts: Arc<F>,
-    logger: Arc<LogFilter>,
+    logger: F::Logger,
     retry_limit: usize,
 }
 
@@ -300,7 +299,7 @@ where
     P: ClientTransport,
 {
     async fn retry_worker(
-        weak_self: Weak<Self>, logger: Arc<LogFilter>,
+        weak_self: Weak<Self>, logger: F::Logger,
         retry_rx: AsyncRx<mpsc::List<FailoverTask<F::Task>>>,
     ) {
         while let Ok(mut task) = retry_rx.recv().await {
@@ -372,8 +371,10 @@ where
 
     type Task = FailoverTask<F::Task>;
 
+    type Logger = F::Logger;
+
     #[inline]
-    fn new_logger(&self) -> Arc<LogFilter> {
+    fn new_logger(&self) -> Self::Logger {
         self.facts.new_logger()
     }
 

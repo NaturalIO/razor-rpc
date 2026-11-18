@@ -11,7 +11,6 @@ use super::throttler::Throttler;
 use crate::client::task::ClientTaskDone;
 use crate::client::timer::ClientTaskTimer;
 use crate::{client::*, proto};
-use captains_log::filter::LogFilter;
 use crossfire::null::CloseHandle;
 use futures_util::pin_mut;
 use orb::prelude::*;
@@ -177,7 +176,7 @@ struct ClientStreamInner<F: ClientFacts, P: ClientTransport> {
     last_resp_ts: Option<Arc<AtomicU64>>,
     encode_buf: UnsafeCell<Vec<u8>>,
     codec: F::Codec,
-    logger: Arc<LogFilter>,
+    logger: F::Logger,
     facts: Arc<F>,
 }
 
