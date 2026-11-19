@@ -1,3 +1,4 @@
+use super::dispatch::Dispatch;
 use crate::proto::RpcAction;
 use crate::server::*;
 use captains_log::filter::LogFilter;
@@ -122,10 +123,7 @@ where
                 loop {
                     match self.conn.read_req(&self.logger, &self.server_close_rx).await {
                         Ok(req) => {
-                            if req.action == RpcAction::Num(0) && req.msg.is_empty() {
-                                // ping request
-                                self.send_quick_resp(req.seq, None)?;
-                            } else {
+                            if req.action != RpcAction::Num(0) || !req.msg.is_empty() {
                                 let seq = req.seq;
                                 if self
                                     .dispatch
@@ -135,6 +133,9 @@ where
                                 {
                                     self.send_quick_resp(seq, Some(RpcIntErr::Decode))?;
                                 }
+                            } else {
+                                // ping request
+                                self.send_quick_resp(req.seq, None)?;
                             }
                         }
                         Err(_e) => {

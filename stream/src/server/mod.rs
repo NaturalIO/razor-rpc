@@ -19,7 +19,6 @@ pub use server::RpcServer;
 pub mod graceful;
 
 pub mod dispatch;
-use dispatch::Dispatch;
 
 /// General config for server-side
 #[derive(Clone)]
