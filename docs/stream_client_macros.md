@@ -70,7 +70,7 @@ The macro processes specific fields within the task struct based on the `#[field
 
 *   `#[field(common)]`:
     *   **Purpose:** Designates a field that holds common task-related information.
-    *   **Requirements:** This field is mandatory. The macro generates `Deref` and `DerefMut` implementations for the task struct, delegating to this `common` field. This allows direct access to the common fields of the task struct.
+    *   **Requirements:** This field is mandatory. The macro generates `AsMut<ClientTaskCommon>` implementations for the task struct, delegating to this `common` field. This allows direct access to the common fields of the task struct.
 
 *   `#[field(action)]`
     *   Purpose: Implement the ClientTaskAction trait to return an RpcAction according to the field.
@@ -107,7 +107,7 @@ The macro processes specific fields within the task struct based on the `#[field
 
 The `#[client_task]` macro automatically generates the following trait implementations for the decorated struct:
 
-*   `std::ops::Deref` and `std::ops::DerefMut`:
+*   `AsMut<ClientTaskCommon>`:
     *   These traits are implemented to delegate to the field marked with `#[field(common)]`, providing convenient access to its members.
 
 *   `ClientTaskEncode`:

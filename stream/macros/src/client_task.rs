@@ -106,7 +106,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         panic!("#[field(res)] and #[field(noti)] must be specified together.");
     }
 
-    let (common_field_name, common_field_type) =
+    let (common_field_name, _common_field_type) =
         common_field.expect("common field must be tagged with #[field(common)]");
     let req_field_name = req_field.expect("req field must be tagged with #[field(req)]");
     let (resp_field_name, resp_field_type) =
@@ -375,7 +375,7 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
         quote! {
             impl #impl_generics_for_impl std::fmt::Debug for #struct_name #ty_generics_for_impl #where_clause_for_impl {
                 fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                    write!(f, "{}(seq={} req={:?}", stringify!(#struct_name), self.seq, &self.#req_field_name)?;
+                    write!(f, "{}(seq={} req={:?}", stringify!(#struct_name), self.#common_field_name.seq, &self.#req_field_name)?;
                     if let Some(resp) = &self.#resp_field_name {
                         write!(f, " resp={:?}", resp)?;
                     }
@@ -396,17 +396,9 @@ pub fn client_task_impl(attr: TokenStream, input: TokenStream) -> TokenStream {
 
         #client_task_done_impl
 
-        impl #impl_generics_for_impl std::ops::Deref for #struct_name #ty_generics_for_impl #where_clause_for_impl {
-            type Target = #common_field_type;
+        impl #impl_generics_for_impl AsMut<razor_stream::client::task::ClientTaskCommon> for #struct_name #ty_generics_for_impl #where_clause_for_impl {
             #[inline]
-            fn deref(&self) -> &Self::Target {
-                &self.#common_field_name
-            }
-        }
-
-        impl #impl_generics_for_impl std::ops::DerefMut for #struct_name #ty_generics_for_impl #where_clause_for_impl {
-            #[inline]
-            fn deref_mut(&mut self) -> &mut Self::Target {
+            fn as_mut(&mut self) -> &mut razor_stream::client::task::ClientTaskCommon {
                 &mut self.#common_field_name
             }
         }

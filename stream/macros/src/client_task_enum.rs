@@ -68,8 +68,7 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
     let mut set_rpc_error_arms = Vec::new();
     let mut set_ok_arms = Vec::new();
     let mut done_arms = Vec::new();
-    let mut deref_arms = Vec::new();
-    let mut deref_mut_arms = Vec::new();
+    let mut as_mut_arms = Vec::new();
 
     let mut inner_type_counts: HashMap<String, usize> = HashMap::new();
 
@@ -160,12 +159,8 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
             #enum_name::#variant_name(inner) => razor_stream::client::task::ClientTaskDone::done(inner),
         });
 
-        deref_arms.push(quote! {
-            #enum_name::#variant_name(inner) => inner,
-        });
-
-        deref_mut_arms.push(quote! {
-            #enum_name::#variant_name(inner) => inner,
+        as_mut_arms.push(quote! {
+            #enum_name::#variant_name(inner) => inner.as_mut(),
         });
     }
 
@@ -174,21 +169,11 @@ pub fn client_task_enum_impl(attr: TokenStream, input: TokenStream) -> TokenStre
 
         #(#from_impls)*
 
-        impl #impl_generics std::ops::Deref for #enum_name #ty_generics #where_clause {
-            type Target = razor_stream::client::task::ClientTaskCommon;
+        impl #impl_generics AsMut<razor_stream::client::task::ClientTaskCommon> for #enum_name #ty_generics #where_clause {
             #[inline]
-            fn deref(&self) -> &Self::Target {
+            fn as_mut(&mut self) -> &mut razor_stream::client::task::ClientTaskCommon {
                 match self {
-                    #(#deref_arms)*
-                }
-            }
-        }
-
-        impl #impl_generics std::ops::DerefMut for #enum_name #ty_generics #where_clause {
-            #[inline]
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                match self {
-                    #(#deref_mut_arms)*
+                    #(#as_mut_arms)*
                 }
             }
         }

@@ -72,7 +72,7 @@ pub enum MyServerTask {
 
 For SubType1, we need to generate MyServerTask::From<SubType1>. If a user processes using SubType and calls subtype::set_result(), it should be transformed via into() into the supertype to call RespNoti.done().
 
-If a user uses the ServerTaskVariant/ServerTaskVariantFull generic as a subtype, which has already implemented ServerTaskEncode/Encode, they cannot implement their own methods due to the "Orphan Rule" limitation of Rust. They should implement wrapper types with the new-type pattern. (I'm not certain about Deref, I should test it).
+If a user uses the ServerTaskVariant/ServerTaskVariantFull generic as a subtype, which has already implemented ServerTaskEncode/Encode, they cannot implement their own methods due to the "Orphan Rule" limitation of Rust. They should implement wrapper types with the new-type pattern.
 
 So the macro is on MyServerTask:
 

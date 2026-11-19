@@ -11,7 +11,6 @@ use crate::{
     error::{EncodedErr, RpcErrCodec, RpcError, RpcIntErr},
 };
 use std::fmt;
-use std::ops::DerefMut;
 
 pub use razor_stream_macros::{client_task, client_task_enum};
 
@@ -21,7 +20,7 @@ pub trait ClientTask:
     + ClientTaskEncode
     + ClientTaskDecode
     + ClientTaskDone
-    + DerefMut<Target = ClientTaskCommon>
+    + AsMut<ClientTaskCommon>
     + Send
     + Sized
     + 'static

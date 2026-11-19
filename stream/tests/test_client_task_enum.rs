@@ -96,8 +96,8 @@ fn test_client_task_enum_delegation() {
     // Test From impls
     let mut enum_task_a: MyTask = task_a.into();
 
-    // Test Deref
-    enum_task_a.set_seq(10);
+    // Test AsMut
+    enum_task_a.as_mut().set_seq(10);
 
     // Test ClientTaskAction delegation
     assert_eq!(enum_task_a.get_action(), RpcAction::Num(1));

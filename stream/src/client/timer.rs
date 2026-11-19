@@ -161,10 +161,10 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
 
     // return None if task is store in sent_tasks
     #[inline]
-    fn got_pending_task(&mut self, task_item: ClientTaskItem<F::Task>) {
+    fn got_pending_task(&mut self, mut task_item: ClientTaskItem<F::Task>) {
         self.pending_task_count.fetch_sub(1, Ordering::SeqCst);
-        let t = task_item.task.as_ref().unwrap();
-        let task_seq = t.seq();
+        let t = task_item.task.as_mut().unwrap();
+        let task_seq = t.as_mut().seq();
         self.processed_seq = task_seq;
         self.sent_tasks.insert(task_seq, task_item);
     }
@@ -183,7 +183,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
                 let mut min_seq = 0;
                 for (_seq, mut task_item) in real_timeout.tasks {
                     let mut task = task_item.task.take().unwrap();
-                    let seq = task.seq();
+                    let seq = task.as_mut().seq();
                     if min_seq == 0 || min_seq > seq {
                         min_seq = seq;
                     }

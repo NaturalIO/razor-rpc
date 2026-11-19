@@ -22,7 +22,7 @@ mod server_task_enum;
 /// It simplifies implementation by generating boilerplate code for several traits.
 ///
 /// The macro always generates:
-/// - `Deref` and `DerefMut` to the field marked `#[field(common)]`.
+/// - `AsMut<ClientTaskCommon>` to the field marked `#[field(common)]`.
 /// - `ClientTaskEncode` for the `#[field(req)]` and `#[field(req_blob)]` fields.
 /// - `ClientTaskDecode` for the `#[field(resp)]` and `#[field(resp_blob)]` fields.
 ///
@@ -33,7 +33,6 @@ mod server_task_enum;
 /// ### Field Attributes:
 ///
 /// * `#[field(common)]`: **(Mandatory)** Marks a field that holds common task information (e.g., `ClientTaskCommon`).
-///   Allows direct access to members like `seq` via `Deref`.
 ///
 /// * `#[field(action)]`: Specifies a field that dynamically provides the RPC action. Mutually exclusive with a static action in `#[client_task(...)`.
 ///

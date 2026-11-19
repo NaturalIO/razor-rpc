@@ -155,12 +155,13 @@ impl ReqHead {
     /// write header, action, msg into `buf`, return reference to blob if there's any
     #[inline(always)]
     pub fn encode<'a, T, C>(
-        codec: &C, buf: &mut Vec<u8>, client_id: u64, task: &'a T,
+        codec: &C, buf: &mut Vec<u8>, client_id: u64, task: &'a mut T,
     ) -> Result<Option<&'a [u8]>, ()>
     where
         T: ClientTask,
         C: Codec,
     {
+        let seq = task.as_mut().seq();
         debug_assert!(buf.capacity() >= RPC_REQ_HEADER_LEN);
         // Leave a room at the beginning of buffer for ReqHead
         unsafe { buf.set_len(RPC_REQ_HEADER_LEN) };
@@ -182,7 +183,7 @@ impl ReqHead {
                     buf,
                     client_id,
                     action_flag,
-                    task.seq(),
+                    seq,
                     msg_len as u32,
                     blob_len as i32,
                 );

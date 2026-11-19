@@ -138,17 +138,9 @@ impl ClientTaskDone for APIClientReq {
     }
 }
 
-impl std::ops::Deref for APIClientReq {
-    type Target = ClientTaskCommon;
+impl AsMut<ClientTaskCommon> for APIClientReq {
     #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.common
-    }
-}
-
-impl std::ops::DerefMut for APIClientReq {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
+    fn as_mut(&mut self) -> &mut ClientTaskCommon {
         &mut self.common
     }
 }
@@ -163,7 +155,7 @@ impl ClientTaskAction for APIClientReq {
 impl fmt::Debug for APIClientReq {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "APIClientReq(seq={}, action={})", self.seq, self.action)
+        write!(f, "APIClientReq(seq={}, action={})", self.common.seq, self.action)
     }
 }
 

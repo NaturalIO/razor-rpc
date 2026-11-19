@@ -549,16 +549,9 @@ impl<T: ClientTask> ClientTaskAction for FailoverTask<T> {
     }
 }
 
-impl<T: ClientTask> std::ops::Deref for FailoverTask<T> {
-    type Target = ClientTaskCommon;
-    fn deref(&self) -> &Self::Target {
-        self.inner.deref()
-    }
-}
-
-impl<T: ClientTask> std::ops::DerefMut for FailoverTask<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.inner.deref_mut()
+impl<T: ClientTask> AsMut<ClientTaskCommon> for FailoverTask<T> {
+    fn as_mut(&mut self) -> &mut ClientTaskCommon {
+        self.inner.as_mut()
     }
 }
 

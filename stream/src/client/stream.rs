@@ -285,9 +285,9 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     #[inline(always)]
     async fn send_request(&self, mut task: F::Task, need_flush: bool) -> Result<(), RpcIntErr> {
         let seq = self.seq_update();
-        task.set_seq(seq);
+        task.as_mut().set_seq(seq);
         let buf = self.get_encoded_buf();
-        match proto::ReqHead::encode(&self.codec, buf, self.client_id, &task) {
+        match proto::ReqHead::encode(&self.codec, buf, self.client_id, &mut task) {
             Err(_) => {
                 logger_warn!(&self.logger, "{:?} send_req encode req {:?} err", self, task);
                 return Err(RpcIntErr::Encode);

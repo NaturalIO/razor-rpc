@@ -7,7 +7,6 @@ use razor_rpc_codec::{Codec, MsgpCodec};
 use razor_stream::error::*;
 use razor_stream::proto::RpcAction;
 use razor_stream_macros::client_task;
-use std::ops::{Deref, DerefMut};
 
 #[derive(Default, Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub struct FileIOReq {
@@ -39,12 +38,12 @@ fn test_client_task_macro() {
     };
     let codec = MsgpCodec::default();
 
-    // Test Deref and DerefMut
-    assert_eq!(task.seq, 123);
-    task.seq = 456;
-    assert_eq!(task.deref().seq, 456);
-    task.deref_mut().seq = 789;
-    assert_eq!(task.seq, 789);
+    // Test AsMut
+    assert_eq!(task.as_mut().seq, 123);
+    task.as_mut().seq = 456;
+    assert_eq!(task.as_mut().seq, 456);
+    task.as_mut().seq = 789;
+    assert_eq!(task.as_mut().seq, 789);
 
     // Test ClientTaskEncode
     let mut req_buf = Vec::new();
