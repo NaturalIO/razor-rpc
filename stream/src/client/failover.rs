@@ -528,7 +528,7 @@ impl<T: ClientTask> ClientTaskDone for FailoverTask<T> {
         } else {
             self.should_retry = false;
         }
-        self.inner.set_rpc_error(e.clone());
+        self.inner.set_rpc_error(e);
     }
 
     #[inline(always)]

@@ -473,6 +473,7 @@ impl RpcErrCodec for String {
     PartialEq,
     PartialOrd,
     Clone,
+    Copy,
     thiserror::Error,
 )]
 #[repr(u8)]
