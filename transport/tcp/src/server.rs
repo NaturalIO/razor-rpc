@@ -215,12 +215,12 @@ impl<RT: AsyncRuntime> ServerTransport for TcpServer<RT> {
 
     #[inline(always)]
     async fn write_resp_internal(
-        &self, logger: &LogFilter, seq: u64, err: Option<RpcIntErr>,
+        &self, logger: &LogFilter, seq: u32, err: Option<RpcIntErr>,
     ) -> io::Result<()> {
         let writer = self.get_stream_mut();
         let write_timeout = self.config.write_timeout;
         let buf = self.get_encode_buf();
-        let seq = proto::RespHead::encode_internal(&logger, buf, seq, err);
+        proto::RespHead::encode_internal(&logger, buf, seq, err);
         match crate::io_with_timeout!(RT, write_timeout, writer.write_all(buf)) {
             Ok(()) => {
                 logger_trace!(logger, "{:?}: send resp seq={}", self, seq);

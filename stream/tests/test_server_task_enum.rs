@@ -30,7 +30,7 @@ struct StaticActionTask;
 
 impl<R: Send + Unpin + 'static> ServerTaskDecode<R> for StaticActionTask {
     fn decode_req<'a, C: Codec>(
-        _codec: &'a C, _action: RpcAction<'a>, _seq: u64, _req: &'a [u8],
+        _codec: &'a C, _action: RpcAction<'a>, _seq: u32, _req: &'a [u8],
         _blob: Option<io_buffer::Buffer>, _noti: RespNoti<R>,
     ) -> Result<Self, ()> {
         Ok(StaticActionTask)

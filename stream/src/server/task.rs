@@ -23,7 +23,7 @@ pub trait ServerTaskResp: ServerTaskEncode + Send + Sized + 'static + fmt::Debug
 /// How to decode a server request
 pub trait ServerTaskDecode<R: Send + 'static>: Send + Sized + 'static {
     fn decode_req<'a, C: Codec>(
-        codec: &'a C, action: RpcAction<'a>, seq: u64, req: &'a [u8], blob: Option<Buffer>,
+        codec: &'a C, action: RpcAction<'a>, seq: u32, req: &'a [u8], blob: Option<Buffer>,
         noti: RespNoti<R>,
     ) -> Result<Self, ()>;
 }
@@ -41,7 +41,7 @@ pub trait ServerTaskDecode<R: Send + 'static>: Send + Sized + 'static {
 pub trait ServerTaskEncode: Send + 'static {
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>);
+    ) -> (u32, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>);
 }
 
 /// How to notify Rpc framework when a task is done
@@ -85,7 +85,7 @@ where
     M: Send + 'static,
     E: RpcErrCodec,
 {
-    pub seq: u64,
+    pub seq: u32,
     pub action: RpcActionOwned,
     pub msg: M,
     pub blob: Option<Buffer>,
@@ -132,7 +132,7 @@ where
     E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
-        codec: &'a C, action: RpcAction<'a>, seq: u64, msg: &'a [u8], blob: Option<Buffer>,
+        codec: &'a C, action: RpcAction<'a>, seq: u32, msg: &'a [u8], blob: Option<Buffer>,
         noti: RespNoti<T>,
     ) -> Result<Self, ()> {
         let req = codec.decode_owned(msg)?;
@@ -160,7 +160,7 @@ where
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
+    ) -> (u32, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         if let Some(res) = self.res.as_ref() {
             match res {
                 Ok(_) => match codec.encode_into(&self.msg, buf) {
@@ -192,7 +192,7 @@ where
     P: Send + 'static,
     E: RpcErrCodec,
 {
-    pub seq: u64,
+    pub seq: u32,
     pub action: RpcActionOwned,
     pub req: R,
     pub req_blob: Option<Buffer>,
@@ -240,7 +240,7 @@ where
     E: RpcErrCodec,
 {
     fn decode_req<'a, C: Codec>(
-        codec: &'a C, action: RpcAction<'a>, seq: u64, msg: &'a [u8], blob: Option<Buffer>,
+        codec: &'a C, action: RpcAction<'a>, seq: u32, msg: &'a [u8], blob: Option<Buffer>,
         noti: RespNoti<T>,
     ) -> Result<Self, ()> {
         let req = codec.decode_owned(msg)?;
@@ -279,7 +279,7 @@ where
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
+    ) -> (u32, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         if let Some(res) = self.res.as_ref() {
             match res {
                 Ok(_) => {
@@ -312,7 +312,7 @@ where
 /// It can be cloned anywhere.
 /// The user doesn't need to call it directly.
 pub struct RespNoti<T: Send + 'static>(
-    pub(crate) MTx<mpsc::List<Result<T, (u64, Option<RpcIntErr>)>>>,
+    pub(crate) MTx<mpsc::List<Result<T, (u32, Option<RpcIntErr>)>>>,
 );
 
 impl<T: Send + 'static> Clone for RespNoti<T> {
@@ -323,7 +323,7 @@ impl<T: Send + 'static> Clone for RespNoti<T> {
 }
 
 impl<T: Send + 'static> RespNoti<T> {
-    pub fn new(tx: MTx<mpsc::List<Result<T, (u64, Option<RpcIntErr>)>>>) -> Self {
+    pub fn new(tx: MTx<mpsc::List<Result<T, (u32, Option<RpcIntErr>)>>>) -> Self {
         Self(tx)
     }
 
@@ -333,7 +333,7 @@ impl<T: Send + 'static> RespNoti<T> {
     }
 
     #[inline]
-    pub(crate) fn send_err(&self, seq: u64, err: Option<RpcIntErr>) -> Result<(), ()> {
+    pub(crate) fn send_err(&self, seq: u32, err: Option<RpcIntErr>) -> Result<(), ()> {
         if self.0.send(Err((seq, err))).is_err() { return Err(()) } else { Ok(()) }
     }
 }

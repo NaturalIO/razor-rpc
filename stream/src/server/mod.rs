@@ -87,7 +87,7 @@ pub trait ServerTransport: Send + Sync + Sized + 'static + fmt::Debug {
 
     /// Write out ping resp or error
     fn write_resp_internal(
-        &self, logger: &LogFilter, seq: u64, err: Option<RpcIntErr>,
+        &self, logger: &LogFilter, seq: u32, err: Option<RpcIntErr>,
     ) -> impl Future<Output = io::Result<()>> + Send;
 
     /// Flush the response for the socket writer, if the transport has buffering logic
@@ -102,7 +102,7 @@ pub trait ServerTransport: Send + Sync + Sized + 'static + fmt::Debug {
 /// NOTE: `RpcAction` and `msg` contains slice that reference to ServerTransport's internal buffer,
 /// you should parse and clone them.
 pub struct RpcSvrReq<'a> {
-    pub seq: u64,
+    pub seq: u32,
     pub action: RpcAction<'a>,
     pub msg: &'a [u8],
     pub blob: Option<Buffer>, // for write, this contains data
@@ -119,12 +119,9 @@ impl<'a> fmt::Debug for RpcSvrReq<'a> {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct RpcSvrResp {
-    pub seq: u64,
-
+    pub seq: u32,
     pub msg: Option<Vec<u8>>,
-
     pub blob: Option<Buffer>,
-
     pub res: Option<Result<(), EncodedErr<'static>>>,
 }
 
@@ -132,7 +129,7 @@ impl task::ServerTaskEncode for RpcSvrResp {
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, _codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
+    ) -> (u32, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         match self.res.as_ref().unwrap() {
             Ok(_) => {
                 if let Some(msg) = self.msg.as_ref() {

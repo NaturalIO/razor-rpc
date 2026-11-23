@@ -23,10 +23,12 @@ use std::{
     pin::Pin,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
     },
     task::{Context, Poll},
 };
+
+pub const MAX_THRESHOLD: u32 = 1 << 16;
 
 /// ClientStream represents a client-side connection.
 ///
@@ -63,7 +65,7 @@ impl<F: ClientFacts, P: ClientTransport> ClientStream<F, P> {
 
     #[inline]
     fn new(
-        facts: F, conn: P, client_id: u64, conn_id: String, last_resp_ts: Option<Arc<AtomicU64>>,
+        facts: F, conn: P, client_id: u32, conn_id: String, last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Self {
         let (_close_tx, _close_rx) = mpsc::new::<mpsc::Null, _, _>();
         let inner = Arc::new(ClientStreamInner::new(
@@ -161,9 +163,10 @@ impl<F: ClientFacts, P: ClientTransport> fmt::Debug for ClientStream<F, P> {
 }
 
 struct ClientStreamInner<F: ClientFacts, P: ClientTransport> {
-    client_id: u64,
+    client_id: u32,
     conn: P,
-    seq: AtomicU64,
+    // only use by sender
+    seq_gen: AtomicU32,
     // NOTE: because close_rx is AsyncRx (lower cost to register waker), but does not have Sync, to solve the & does
     // not have Send problem, we convert this to mut ref to make borrow checker shutup
     close_rx: UnsafeCell<AsyncRx<mpsc::Null>>,
@@ -191,27 +194,30 @@ impl<F: ClientFacts, P: ClientTransport> fmt::Debug for ClientStreamInner<F, P> 
 
 impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     pub fn new(
-        facts: F, conn: P, client_id: u64, conn_id: String, close_rx: AsyncRx<mpsc::Null>,
+        facts: F, conn: P, client_id: u32, conn_id: String, close_rx: AsyncRx<mpsc::Null>,
         last_resp_ts: Option<Arc<AtomicU64>>,
     ) -> Self {
         let config = facts.get_config();
-        let mut thresholds = config.thresholds;
+        let mut thresholds = config.thresholds as u32;
         if thresholds == 0 {
             thresholds = 128;
+        } else if thresholds > MAX_THRESHOLD {
+            thresholds = MAX_THRESHOLD;
         }
         let client_inner = Self {
             client_id,
             conn,
             close_rx: UnsafeCell::new(close_rx),
             closed: AtomicBool::new(false),
-            seq: AtomicU64::new(1),
+            seq_gen: AtomicU32::new(1),
             encode_buf: UnsafeCell::new(Vec::with_capacity(1024)),
-            throttler: Throttler::new(thresholds),
+            // TODO limit seq_gen to below min_delay_seq
+            throttler: Throttler::new(thresholds as usize),
             last_resp_ts,
             has_err: AtomicBool::new(false),
             codec: F::Codec::default(),
             logger: facts.new_logger(),
-            timer: UnsafeCell::new(ClientTaskTimer::new(conn_id, config.task_timeout, thresholds)),
+            timer: UnsafeCell::new(ClientTaskTimer::new(conn_id, config.task_timeout)),
             facts,
         };
         logger_trace!(client_inner.logger, "{:?} throttler is set to {}", client_inner, thresholds,);
@@ -450,8 +456,8 @@ impl<F: ClientFacts, P: ClientTransport> ClientStreamInner<F, P> {
     }
 
     #[inline(always)]
-    fn seq_update(&self) -> u64 {
-        self.seq.fetch_add(1, Ordering::SeqCst)
+    fn seq_update(&self) -> u32 {
+        self.seq_gen.fetch_add(1, Ordering::Acquire)
     }
 }
 

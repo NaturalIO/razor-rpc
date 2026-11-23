@@ -221,7 +221,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                 fn decode_req<'a, C: razor_stream::Codec>(
                     codec: &'a C,
                     action: razor_stream::proto::RpcAction<'a>,
-                    seq: u64,
+                    seq: u32,
                     req: &'a [u8],
                     blob: Option<io_buffer::Buffer>,
                     noti: razor_stream::server::task::RespNoti<#resp_type>,
@@ -250,7 +250,7 @@ pub fn server_task_enum_impl(attrs: TokenStream, input: TokenStream) -> TokenStr
                     &'a mut self,
                     codec: &C,
                     buf: &'b mut Vec<u8>,
-                ) -> (u64, Result<(usize, Option<&'a [u8]>), razor_stream::error::EncodedErr>) {
+                ) -> (u32, Result<(usize, Option<&'a [u8]>), razor_stream::error::EncodedErr>) {
                     match self {
                         #(#encode_arms)*
                     }

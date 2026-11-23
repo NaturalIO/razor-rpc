@@ -93,7 +93,7 @@ pub trait ClientFacts: Send + Sync + Sized + 'static + Clone {
 
     /// You can overwrite this to assign a client_id
     #[inline(always)]
-    fn get_client_id(&self) -> u64 {
+    fn get_client_id(&self) -> u32 {
         0
     }
 
