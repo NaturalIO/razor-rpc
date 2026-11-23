@@ -9,7 +9,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 pub struct APIServerReq<C: Codec> {
-    pub seq: u64,
+    pub seq: u32,
     pub service: String,
     pub method: String,
     pub req: Option<Vec<u8>>,
@@ -64,7 +64,7 @@ impl<C: Codec> APIServerReq<C> {
 }
 
 pub struct APIServerResp {
-    pub seq: u64,
+    pub seq: u32,
     pub msg: Option<Vec<u8>>,
     pub res: Option<Result<(), EncodedErr<'static>>>,
 }
@@ -79,7 +79,7 @@ impl ServerTaskEncode for APIServerResp {
     #[inline]
     fn encode_resp<'a, 'b, C: Codec>(
         &'a mut self, _codec: &'b C, buf: &'b mut Vec<u8>,
-    ) -> (u64, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
+    ) -> (u32, Result<(usize, Option<&'a [u8]>), EncodedErr<'a>>) {
         match self.res.as_ref().unwrap() {
             Ok(()) => {
                 if let Some(msg) = self.msg.as_ref() {

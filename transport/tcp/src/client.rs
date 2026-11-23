@@ -128,8 +128,8 @@ impl<RT: AsyncRuntime> TcpClient<RT> {
         let read_timeout = self.read_timeout;
         let blob_len = resp_head.blob_len.get();
         let read_buf = self.get_resp_buf(resp_head.msg_len.get() as usize);
-        if let Some(mut task_item) = task_reg.take_task(resp_head.seq.get()).await {
-            let mut task = task_item.task.take().unwrap();
+        if let Some(task_item) = task_reg.take_task(resp_head.seq.get()).await {
+            let mut task = task_item.task;
             if resp_head.flag == 0 {
                 if resp_head.msg_len > 0 {
                     match crate::io_with_timeout!(RT, read_timeout, reader.read_exact(read_buf)) {

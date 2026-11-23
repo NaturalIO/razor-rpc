@@ -117,14 +117,11 @@ pub trait ClientTaskAction {
 #[derive(Debug, Default)]
 pub struct ClientTaskCommon {
     /// Every task should be assigned an ID which is unique inside a socket connection
-    pub seq: u64,
+    pub seq: u32,
 }
 
 impl ClientTaskCommon {
-    pub fn seq(&self) -> u64 {
-        self.seq
-    }
-    pub fn set_seq(&mut self, seq: u64) {
+    pub fn set_seq(&mut self, seq: u32) {
         self.seq = seq;
     }
 }

@@ -106,18 +106,15 @@ impl RpcActionOwned {
 pub struct ReqHead {
     pub magic: little_endian::U16,
     pub ver: u8,
-    pub format: u8,
     /// encoder-decoder format
-
+    pub format: u8,
+    pub client_id: little_endian::U32,
+    /// Increased ID of request msg in the socket connection.
+    pub seq: little_endian::U32,
     /// If highest bit is 0, the rest will be i32 action_num.
     ///
     /// If highest is 1, the lower bit will be i32 action_len.
     pub action: little_endian::U32,
-
-    /// Increased ID of request msg in the socket connection.
-    pub seq: little_endian::U64,
-
-    pub client_id: little_endian::U64,
     /// structured msg len
     pub msg_len: little_endian::U32,
     /// unstructured msg
@@ -128,7 +125,7 @@ pub const RPC_REQ_HEADER_LEN: usize = size_of::<ReqHead>();
 
 impl ReqHead {
     #[inline(always)]
-    pub fn encode_ping(buf: &mut Vec<u8>, client_id: u64, seq: u64) {
+    pub fn encode_ping(buf: &mut Vec<u8>, client_id: u32, seq: u32) {
         debug_assert!(buf.capacity() > RPC_REQ_HEADER_LEN);
         unsafe { buf.set_len(RPC_REQ_HEADER_LEN) };
         Self::_write_head(buf, client_id, PING_ACTION, seq, 0, 0);
@@ -136,7 +133,7 @@ impl ReqHead {
 
     #[inline(always)]
     fn _write_head(
-        buf: &mut [u8], client_id: u64, action: u32, seq: u64, msg_len: u32, blob_len: i32,
+        buf: &mut [u8], client_id: u32, action: u32, seq: u32, msg_len: u32, blob_len: i32,
     ) {
         // NOTE: We are directly init ReqHead on the buffer with unsafe, check carefully don't miss
         // a field
@@ -155,13 +152,13 @@ impl ReqHead {
     /// write header, action, msg into `buf`, return reference to blob if there's any
     #[inline(always)]
     pub fn encode<'a, T, C>(
-        codec: &C, buf: &mut Vec<u8>, client_id: u64, task: &'a mut T,
+        codec: &C, buf: &mut Vec<u8>, client_id: u32, task: &'a mut T,
     ) -> Result<Option<&'a [u8]>, ()>
     where
         T: ClientTask,
         C: Codec,
     {
-        let seq = task.as_mut().seq();
+        let seq = task.as_mut().seq;
         debug_assert!(buf.capacity() >= RPC_REQ_HEADER_LEN);
         // Leave a room at the beginning of buffer for ReqHead
         unsafe { buf.set_len(RPC_REQ_HEADER_LEN) };
@@ -267,7 +264,7 @@ pub struct RespHead {
     pub msg_len: little_endian::U32,
 
     /// Increased ID of request msg in the socket connection (response.seq==request.seq)
-    pub seq: little_endian::U64,
+    pub seq: little_endian::U32,
     /// unstructured msg blob
     pub blob_len: little_endian::U32,
 }
@@ -278,7 +275,7 @@ impl RespHead {
     #[inline]
     pub fn encode<'a, 'b, L, C, T>(
         logger: &'b L, codec: &'b C, buf: &'b mut Vec<u8>, task: &'a mut T,
-    ) -> (u64, Option<&'a [u8]>)
+    ) -> (u32, Option<&'a [u8]>)
     where
         L: captains_log::filter::Filter,
         C: Codec,
@@ -313,9 +310,8 @@ impl RespHead {
 
     #[inline]
     pub fn encode_internal<'a, L>(
-        logger: &'a L, buf: &'a mut Vec<u8>, seq: u64, err: Option<RpcIntErr>,
-    ) -> u64
-    where
+        logger: &'a L, buf: &'a mut Vec<u8>, seq: u32, err: Option<RpcIntErr>,
+    ) where
         L: captains_log::filter::Filter,
     {
         debug_assert!(buf.capacity() >= RPC_RESP_HEADER_LEN);
@@ -323,16 +319,14 @@ impl RespHead {
         unsafe { buf.set_len(RPC_RESP_HEADER_LEN) };
         if let Some(e) = err {
             Self::_encode_error::<L>(logger, buf, seq, e.to_encoded_err());
-            return seq;
         } else {
             // ping
             Self::_write_head::<L>(logger, buf, 0, seq, 0, 0);
-            return seq;
         }
     }
 
     #[inline(always)]
-    fn _encode_error<'a, L>(logger: &'a L, buf: &'a mut Vec<u8>, seq: u64, e: EncodedErr<'a>)
+    fn _encode_error<'a, L>(logger: &'a L, buf: &'a mut Vec<u8>, seq: u32, e: EncodedErr<'a>)
     where
         L: captains_log::filter::Filter,
     {
@@ -360,7 +354,7 @@ impl RespHead {
     }
 
     #[inline]
-    fn _write_head<L>(logger: &L, buf: &mut [u8], flag: u8, seq: u64, msg_len: u32, blob_len: u32)
+    fn _write_head<L>(logger: &L, buf: &mut [u8], flag: u8, seq: u32, msg_len: u32, blob_len: u32)
     where
         L: captains_log::filter::Filter,
     {

@@ -147,7 +147,7 @@ where
             }
 
             #[inline]
-            fn send_quick_resp(&self, seq: u64, err: Option<RpcIntErr>) -> Result<(), ()> {
+            fn send_quick_resp(&self, seq: u32, err: Option<RpcIntErr>) -> Result<(), ()> {
                 if self.noti.send_err(seq, err).is_err() {
                     logger_warn!(self.logger, "{:?} reader abort due to writer has err", self.conn);
                     return Err(());
@@ -158,7 +158,7 @@ where
 
         struct Writer<P: ServerTransport, D: Dispatch> {
             codec: Arc<D::Codec>,
-            done_rx: AsyncRx<mpsc::List<Result<D::RespTask, (u64, Option<RpcIntErr>)>>>,
+            done_rx: AsyncRx<mpsc::List<Result<D::RespTask, (u32, Option<RpcIntErr>)>>>,
             conn: Arc<P>,
             logger: Arc<LogFilter>,
         }

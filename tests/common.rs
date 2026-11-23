@@ -7,7 +7,7 @@ use serde_derive::{Deserialize, Serialize};
 use std::sync::Arc;
 
 pub fn create_mock_request<T: serde::Serialize>(
-    seq: u64, service: String, method: String, req: &T, noti: RespNoti<APIServerResp>,
+    seq: u32, service: String, method: String, req: &T, noti: RespNoti<APIServerResp>,
 ) -> APIServerReq<MsgpCodec> {
     let codec = Arc::new(MsgpCodec::default());
     let req_data = codec.encode(req).expect("encode");

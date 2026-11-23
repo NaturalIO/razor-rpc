@@ -3,7 +3,7 @@
 //! This module is only for transport implementation, not for the user.
 
 use std::{
-    collections::{BTreeMap, vec_deque::VecDeque},
+    collections::vec_deque::VecDeque,
     future::Future,
     mem::swap,
     pin::Pin,
@@ -14,29 +14,27 @@ use std::{
 use crate::client::task::ClientTaskDone;
 use crate::client::*;
 use crossfire::{stream::AsyncStream, waitgroup::WaitGroupGuard, *};
+use embed_btree::VariousMap;
+use seqnum::SeqU32;
 
 pub struct ClientTaskItem<T: ClientTask> {
-    pub task: Option<T>,
+    pub task: T,
     _upstream: WaitGroupGuard<()>,
 }
 
-pub(crate) struct DelayTasksBatch<T: ClientTask> {
-    tasks: BTreeMap<u64, ClientTaskItem<T>>,
-}
+type TasksBatch<T> = VariousMap<u32, ClientTaskItem<T>>;
 
 pub struct ClientTaskTimer<F: ClientFacts> {
     conn_id: String,
     pending_tasks_recv: AsyncStream<mpsc::Array<ClientTaskItem<F::Task>>>,
     pending_tasks_sender: MAsyncTx<mpsc::Array<ClientTaskItem<F::Task>>>,
     pending_task_count: AtomicU64,
+    sent_tasks: TasksBatch<F::Task>, // sent_tasks of the current second
+    delay_tasks_queue: VecDeque<TasksBatch<F::Task>>, // sent_tasks of past seconds
 
-    sent_tasks: BTreeMap<u64, ClientTaskItem<F::Task>>, // sent_tasks of the current second
-    delay_tasks_queue: VecDeque<DelayTasksBatch<F::Task>>, // sent_tasks of past seconds
-
-    min_delay_seq: u64,
     task_timeout: usize, // in seconds
-    // TODO what if seq reach max u64, should exit client
-    processed_seq: u64,
+    //min_delay_seq: SeqU32,
+    processed_seq: SeqU32,
     reg_stopped_flag: AtomicBool,
 }
 
@@ -44,21 +42,18 @@ unsafe impl<T: ClientFacts> Send for ClientTaskTimer<T> {}
 unsafe impl<T: ClientFacts> Sync for ClientTaskTimer<T> {}
 
 impl<F: ClientFacts> ClientTaskTimer<F> {
-    pub fn new(conn_id: String, task_timeout: usize, mut thresholds: usize) -> Self {
-        if thresholds == 0 {
-            thresholds = 500;
-        }
-        let (pending_tx, pending_rx) = mpsc::bounded_async(thresholds * 2);
+    pub fn new(conn_id: String, task_timeout: usize) -> Self {
+        let (pending_tx, pending_rx) = mpsc::bounded_async(512);
         Self {
             conn_id,
             pending_tasks_recv: pending_rx.into_stream(),
             pending_tasks_sender: pending_tx,
             pending_task_count: AtomicU64::new(0),
-            sent_tasks: BTreeMap::new(),
-            min_delay_seq: 0,
+            sent_tasks: VariousMap::new(),
             task_timeout,
             delay_tasks_queue: VecDeque::with_capacity(task_timeout),
-            processed_seq: 0,
+            //min_delay_seq: 0.into(),
+            processed_seq: 0.into(),
             reg_stopped_flag: AtomicBool::new(false),
         }
     }
@@ -71,24 +66,16 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
         while let Ok(task) = self.pending_tasks_recv.try_recv() {
             self.got_pending_task(task);
         }
-        let mut task_seqs: Vec<u64> = Vec::with_capacity(self.sent_tasks.len());
-        for key in self.sent_tasks.keys() {
-            task_seqs.push(*key);
-        }
-        for key in task_seqs {
-            let mut task_item = self.sent_tasks.remove(&key).unwrap();
-            let mut task = task_item.task.take().unwrap();
+        let mut temp = VariousMap::new();
+        core::mem::swap(&mut self.sent_tasks, &mut temp);
+        for (_key, task_item) in temp {
+            let mut task = task_item.task;
             task.set_rpc_error(RpcIntErr::IO);
             facts.error_handle(task);
         }
-        for tasks_batch_in_second in self.delay_tasks_queue.iter_mut() {
-            let mut task_seqs: Vec<u64> = Vec::with_capacity(tasks_batch_in_second.tasks.len());
-            for key in tasks_batch_in_second.tasks.keys() {
-                task_seqs.push(*key);
-            }
-            for key in task_seqs {
-                let mut task_item = tasks_batch_in_second.tasks.remove(&key).unwrap();
-                let mut task = task_item.task.take().unwrap();
+        for batch in self.delay_tasks_queue.drain(..) {
+            for (_key, task_item) in batch {
+                let mut task = task_item.task;
                 task.set_rpc_error(RpcIntErr::IO);
                 facts.error_handle(task);
             }
@@ -103,7 +90,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
             return false;
         }
         for tasks_batch_in_second in self.delay_tasks_queue.iter() {
-            if !tasks_batch_in_second.tasks.is_empty() {
+            if !tasks_batch_in_second.is_empty() {
                 return false;
             }
         }
@@ -113,10 +100,7 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
     // register noti for task.
     #[inline(always)]
     pub async fn reg_task(&self, task: F::Task, wg: WaitGroupGuard<()>) {
-        let _ = self
-            .pending_tasks_sender
-            .send(ClientTaskItem { task: Some(task), _upstream: wg })
-            .await;
+        let _ = self.pending_tasks_sender.send(ClientTaskItem { task, _upstream: wg }).await;
     }
 
     // stop register.
@@ -124,13 +108,12 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
         self.reg_stopped_flag.store(true, Ordering::SeqCst);
     }
 
-    pub async fn take_task(&mut self, seq: u64) -> Option<ClientTaskItem<F::Task>> {
+    pub async fn take_task(&mut self, seq: u32) -> Option<ClientTaskItem<F::Task>> {
+        let _seq = SeqU32::from(seq);
         // ping resp won't readh here
-        if seq < self.min_delay_seq {
-            return None; // Task is already timeouted by us
-        }
-        if seq > self.processed_seq {
-            let f = WaitRegTaskFuture { noti: self, target_seq: seq };
+        if _seq <= self.processed_seq {
+        } else {
+            let f = WaitRegTaskFuture { noti: self, target_seq: _seq };
             if f.await.is_err() {
                 return None;
             }
@@ -140,10 +123,11 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
             return Some(_removed_task);
         }
         for tasks_batch_in_second in self.delay_tasks_queue.iter_mut() {
-            if let Some(_task) = tasks_batch_in_second.tasks.remove(&seq) {
+            if let Some(_task) = tasks_batch_in_second.remove(&seq) {
                 return Some(_task);
             }
         }
+        // Task is already timeouted by us
         return None;
     }
 
@@ -163,35 +147,30 @@ impl<F: ClientFacts> ClientTaskTimer<F> {
     #[inline]
     fn got_pending_task(&mut self, mut task_item: ClientTaskItem<F::Task>) {
         self.pending_task_count.fetch_sub(1, Ordering::SeqCst);
-        let t = task_item.task.as_mut().unwrap();
-        let task_seq = t.as_mut().seq();
-        self.processed_seq = task_seq;
+        let task_seq = task_item.task.as_mut().seq;
+        self.processed_seq = SeqU32::from(task_seq);
         self.sent_tasks.insert(task_seq, task_item);
     }
 
     pub fn adjust_task_queue(&mut self, facts: &F) {
         // 1. move wait_confirmed to overtime
-        let mut tasks_batch_in_second = BTreeMap::new();
+        let mut tasks_batch_in_second = VariousMap::new();
         swap(&mut self.sent_tasks, &mut tasks_batch_in_second);
 
         // 2.notify req with timeout err
-        self.delay_tasks_queue.push_front(DelayTasksBatch { tasks: tasks_batch_in_second });
+        self.delay_tasks_queue.push_front(tasks_batch_in_second);
 
         if self.delay_tasks_queue.len() > self.task_timeout {
             let real_timeout = self.delay_tasks_queue.pop_back().unwrap();
-            if !real_timeout.tasks.is_empty() {
-                let mut min_seq = 0;
-                for (_seq, mut task_item) in real_timeout.tasks {
-                    let mut task = task_item.task.take().unwrap();
-                    let seq = task.as_mut().seq();
-                    if min_seq == 0 || min_seq > seq {
-                        min_seq = seq;
-                    }
-                    warn!("{} task {:?} is timeout", self.conn_id, task,);
+            if !real_timeout.is_empty() {
+                //let (min_seq, _) = real_timeout.last_key_value().unwrap();
+                for (_seq, task_item) in real_timeout {
+                    let mut task = task_item.task;
+                    warn!("{} task {:?} is timeout", self.conn_id, task);
                     task.set_rpc_error(RpcIntErr::Timeout);
                     facts.error_handle(task);
                 }
-                self.min_delay_seq = min_seq;
+                //self.min_delay_seq = min_seq.wrapping_add(1).into();
             }
         }
     }
@@ -202,7 +181,7 @@ where
     F: ClientFacts,
 {
     noti: &'a mut ClientTaskTimer<F>,
-    target_seq: u64,
+    target_seq: SeqU32,
 }
 
 impl<'a, F> Future for WaitRegTaskFuture<'a, F>
