@@ -30,3 +30,5 @@ default = ["smol"]
 tokio = ["dep:tokio", "dep:orb-tokio"]
 smol = ["dep:smol", "dep:orb-smol"]
 
+[lints]
+workspace = true

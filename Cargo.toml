@@ -1,5 +1,5 @@
 [workspace]
-members = ["codec", "macros", "stream", "stream/macros", "transport/tcp", "transport/rdma", "transport/quic", "test-suite", ]
+members = ["codec", "macros", "stream", "stream/macros", "transport/tcp", "test-suite", ]
 
 [package]
 name = "razor-rpc"
