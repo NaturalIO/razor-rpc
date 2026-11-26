@@ -58,7 +58,7 @@ impl Default for ClientConfig {
 
 /// A trait implemented by the user for the client-side, to define the customizable plugin.
 ///
-/// NOTE: [ClientPool](crate::client::ClientPool) require ClientFacts to be cloneable.
+/// NOTE: [ConnPool] require ClientFacts to be cloneable.
 /// It's Ok to use Arc or impl Clone for simple struct.
 pub trait ClientFacts: Send + Sync + Sized + 'static + Clone {
     /// Define the codec to serialization and deserialization
