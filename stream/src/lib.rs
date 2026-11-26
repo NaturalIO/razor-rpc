@@ -61,6 +61,9 @@
 #[macro_use]
 extern crate captains_log;
 
+#[macro_use]
+extern crate format_attr;
+
 pub mod buffer;
 pub mod client;
 pub mod error;
