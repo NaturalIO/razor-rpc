@@ -505,6 +505,8 @@ pub enum RpcIntErr {
     /// invalid version number in rpc header
     #[strum(serialize = "rpc_invalid_ver")]
     Version = 8,
+    #[strum(serialize = "no_mem")]
+    NoMem = 9,
 }
 
 // The default Debug derive just ignore strum customized string, by strum only have a Display derive
