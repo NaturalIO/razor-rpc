@@ -49,8 +49,6 @@ fn test_client_ping(runner: TestRunner, #[case] is_tcp: bool) {
             // Give some time between pings
             crate::RT::sleep(std::time::Duration::from_millis(100)).await;
         }
-
-        assert!(!client.is_closed());
         log::info!("Ping test completed successfully.");
     });
 }

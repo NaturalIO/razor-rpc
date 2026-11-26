@@ -38,6 +38,7 @@ bstr = "1"
 smallvec = { version="1", optional=true, features=["write"]}
 embed-btree = ">=0.5"
 seqnum = {git="https://github.com/frostyplanet/seqnum.git", rev="20b361c"}
+format-attr = "0"
 
 [features]
 default = ["smallvec"]

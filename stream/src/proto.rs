@@ -196,16 +196,20 @@ impl ReqHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcIntErr> {
-        let head: &Self = Self::ref_from_bytes(head_buf).expect("from header buf");
-        if head.magic != RPC_MAGIC {
-            warn!("rpc server: wrong magic receive {:?}", head.magic);
+    pub fn validate(&self) -> Result<(), RpcIntErr> {
+        if self.magic != RPC_MAGIC {
             return Err(RpcIntErr::IO);
         }
-        if head.ver != RPC_VERSION_1 {
-            warn!("rpc server: version {} not supported", head.ver);
+        if self.ver != RPC_VERSION_1 {
             return Err(RpcIntErr::Version);
         }
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcIntErr> {
+        let head: &Self = Self::ref_from_bytes(head_buf).expect("from header buf");
+        head.validate()?;
         return Ok(head);
     }
 
@@ -369,17 +373,26 @@ impl RespHead {
     }
 
     #[inline(always)]
-    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcIntErr> {
-        let head: &Self = Self::ref_from_bytes(head_buf).expect("decode header");
-        if head.magic != RPC_MAGIC {
-            warn!("rpc server: wrong magic receive {:?}", head.magic);
+    pub fn validate(&self) -> Result<(), RpcIntErr> {
+        if self.magic != RPC_MAGIC {
             return Err(RpcIntErr::IO);
         }
-        if head.ver != RPC_VERSION_1 {
-            warn!("rpc server: version {} not supported", head.ver);
+        if self.ver != RPC_VERSION_1 {
             return Err(RpcIntErr::Version);
         }
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub fn decode_head(head_buf: &[u8]) -> Result<&Self, RpcIntErr> {
+        let head: &Self = Self::ref_from_bytes(head_buf).expect("decode header");
+        head.validate()?;
         return Ok(head);
+    }
+
+    #[inline(always)]
+    pub fn as_buf_mut(&mut self) -> &mut [u8] {
+        self.as_mut_bytes()
     }
 }
 
